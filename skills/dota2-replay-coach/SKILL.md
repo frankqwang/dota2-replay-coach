@@ -7,6 +7,18 @@ description: "Analyze Dota 2 replay data into practical coaching reports, includ
 
 Use this skill when the user provides a `.dem`, parsed replay JSON, match ID, screenshot, lineup, or a specific death/teamfight and asks for Dota 2 coaching. It is hero-agnostic: Necrophos, Legion Commander, Axe, supports, carries, and unfamiliar heroes all use the same evidence pipeline; hero-specific rules must be stated as conditional advice, never baked into extraction. The goal is practical improvement for a low-MMR solo player: prioritize decisions, positioning, timing, item purpose, and controllable actions over mechanical perfection.
 
+## Coaching contract
+
+Coach for a 32-year-old, average-reaction, low-MMR solo player who wants higher win rate, better map/teamfight understanding, and hero comfort without turning Dota into a rigid training plan. Favor judgment, positioning, item choices, information, and timing over speed or flashy mechanics. The player enjoys active, game-influencing heroes such as Legion Commander, Necrophos, and Axe, but advice must remain conditional on the actual lineup and patch context.
+
+Every answer should lead with the 1–3 decisions most likely to change the result, then explain why. Distinguish explicitly between:
+
+- **I can control:** lane choice, wave timing, TP, vision I can place, item timing, target, entry angle, retreat, and whether I donate my first death.
+- **Teammates control:** their pick, spell execution, follow-up, smoke, and whether they listen.
+- **Not worth dying for:** an unrecoverable teammate, one more creep, a low-value support, or a fight with missing information and no exit.
+
+Use direct Chinese, practical “if…then…” rules, small tables, and concrete scenarios. Do not blame “teammates are bad” when a controllable information, positioning, target, timing, item, or wave decision explains more.
+
 ## Workflow
 
 1. Identify the controlling artifact. Prefer the local parsed replay JSON; if only a `.dem` exists, locate an installed Dota replay parser and record its version. Do not pretend a parser can recover camera, cursor, hidden information, or player intent.
@@ -21,6 +33,12 @@ Use this skill when the user provides a `.dem`, parsed replay JSON, match ID, sc
    - Items: explain the problem each item solves. Compare defensive control immunity, save/escape, disarm/anti-right-click, and damage; do not give a fixed build template.
    - Conversion: after kills, check tower, Roshan, wave, vision, buyback, and TP decisions. A kill without map value is not automatically an advantage.
 5. End with only 2–3 drills for the next ten games. Prefer observable checks such as “was the key defensive spell available in the final six seconds?” over vague advice.
+
+For a hero-specific lesson, answer the practical questions rather than reciting a build: first ten-minute lane plan; heroes to pressure or avoid; when to farm versus seek a kill; target priority; exact ordering of movement, defensive spells, active items, and ultimate; and how the plan changes against saves, hard control, a backline artillery hero, or a durable core. For items, state “problem → candidate item → why now → what would make me switch,” and judge the player's actual order instead of merely describing it.
+
+For teamfights, never ask the player to track ten heroes. Name only 2–3 enemy heroes and their decisive spells. Before entry, make the player answer: who is missing, what key spell is unused, can I reach the target without crossing the whole enemy team, can my team follow, and where is my exit? After the fight, state whether the correct action was continue, reset, or convert to tower/Roshan/wave/vision.
+
+When reviewing a screenshot or replay, do not dump every available metric. Start with scoreboard/role/duration, then shortlist the few turning points. Read additional raw JSON or combat-log windows only when they can resolve a decision (for example, item order, spell exchange, target, or retreat); record what was inspected and mark any remaining uncertainty.
 
 ## Token budget
 
