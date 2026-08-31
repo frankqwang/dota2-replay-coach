@@ -44,6 +44,10 @@ When reviewing a screenshot or replay, do not dump every available metric. Start
 
 Never send the binary `.dem` to the model and do not paste the full parsed combat log unless explicitly needed for a narrow forensic question. A typical 40-minute parsed JSON can be 50–80 MB (roughly 15–25 million tokens depending on formatting and language), which is wasteful. Use the extractor first: its compact fact bundle is usually tens of thousands of bytes (roughly 15–25k tokens in pretty JSON, less when minified). For a normal report, send the fact bundle plus only 2–4 selected death/teamfight windows; a practical target is 8–20k input tokens and 3–8k output tokens. If the report contains charts, keep their datasets in the artifact snapshot, not duplicated in the coaching prompt.
 
+## Performance budget and caching
+
+Use a cheap triage pass before downloading or parsing a DEM: OpenDota/Dota2ProTracker metadata can establish duration, roster, score, role, purchases, and draft caveats. Download and parse only when a question needs spell order, target, positioning, or a precise fight window. Cache by match ID, replay checksum, and parser version; never re-parse an unchanged DEM or regenerate the full report for a wording-only correction. Reuse one compact fact bundle and one ranked list of decision-relevant windows instead of repeated ad-hoc JSON scans. Keep validation output to pass/fail plus errors, and deploy Sites once after the Markdown judgments are stable. Record approximate elapsed time for download, decompression, parse, extraction, analysis, and publish so the user can see where latency and tokens went.
+
 ## Low-MMR operating rules
 
 - If teammates blindly rush, follow one screen behind and counter-enter; do not become the missing initiator by donating the first death.
