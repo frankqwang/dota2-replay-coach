@@ -61,8 +61,9 @@ def main() -> None:
             "my_deaths": mine.get("deaths", 0),
             "my_kills": sum(mine.get("killed", {}).values()),
         })
+    real_deaths = [e for e in deaths if not e.get("will_reincarnate")]
     death_context = []
-    for death in deaths:
+    for death in real_deaths:
         when = death["game_time_s"]
         window = [e for e in combat if when - 6 <= e["game_time_s"] <= when]
         incoming = [e for e in window if e.get("log_type") == "DAMAGE" and e.get("target_name") == wanted]
@@ -74,6 +75,16 @@ def main() -> None:
             "top_damage_sources": sorted(((short(e.get("damage_source_name") or e.get("attacker_name")), e.get("value", 0)) for e in incoming), key=lambda x: -x[1])[:3],
             "my_actions_last_6s": actions,
         })
+    # Anti-invisibility purchases per player: needed to judge invis-item value
+    # (dust/sentry/gem counts; item_ward_dispenser is a merge artifact, not a purchase).
+    detection_items = {"item_dust": "dust", "item_ward_sentry": "sentry", "item_gem": "gem"}
+    detection = {short(p.get("hero_name")): {"dust": 0, "sentry": 0, "gem": 0} for p in data.get("players", [])}
+    for e in data.get("combat_log", []):
+        if e.get("log_type") != "PURCHASE":
+            continue
+        key = detection_items.get(e.get("value_name") or "")
+        if key:
+            detection[short(e.get("target_name"))][key] += 1
     ability_uses = player.get("ability_uses", {})
     item_uses = player.get("item_uses", {})
     result = {
@@ -82,7 +93,7 @@ def main() -> None:
         "duration": data.get("duration"),
         "duration_label": clock(data["duration"]) if data.get("duration") is not None else None,
         "draft_available": bool(data.get("draft")),
-        "lineup": [{"side": "radiant" if p.get("is_radiant") else "dire", "hero": short(p.get("hero_name")), "kda": [p.get("kills"), p.get("deaths"), p.get("assists")], "net_worth": p.get("net_worth")} for p in data.get("players", [])],
+        "lineup": [{"side": "radiant" if p.get("is_radiant") else "dire", "hero": short(p.get("hero_name")), "lane_role": p.get("lane_role"), "kda": [p.get("kills"), p.get("deaths"), p.get("assists")], "net_worth": p.get("net_worth")} for p in data.get("players", [])],
         "player_summary": {"kills": player.get("kills"), "deaths": player.get("deaths"), "assists": player.get("assists"), "hero_damage": player.get("hero_damage"), "tower_damage": player.get("tower_damage"), "net_worth": player.get("net_worth"), "last_hits": player.get("last_hits"), "lane_efficiency_pct": player.get("lane_efficiency_pct"), "teamfight_participation": player.get("teamfight_participation"), "obs_placed": player.get("obs_placed"), "sen_placed": player.get("sen_placed")},
         "networth_checkpoints": checkpoints,
         "gold_advantage": data.get("radiant_gold_adv", []),
@@ -90,12 +101,13 @@ def main() -> None:
         "ability_uses": ability_uses,
         "item_uses": item_uses,
         "purchases": player.get("purchase_log", []),
+        "detection_purchases_by_player": detection,
         "deaths": death_context,
         "teamfights": teamfights,
         "objectives": data.get("objectives", []),
         "wards": data.get("wards", []),
         "smokes": data.get("smoke_events", []),
-        "data_quality": {"player_count": len(data.get("players", [])), "combat_event_count": len(combat), "scoreboard_deaths_match_events": len(deaths) == player.get("deaths")},
+        "data_quality": {"player_count": len(data.get("players", [])), "combat_event_count": len(combat), "scoreboard_deaths_match_events": len(real_deaths) == player.get("deaths"), "reincarnation_pseudo_deaths_ignored": len(deaths) - len(real_deaths)},
     }
     if args.pretty:
         payload = json.dumps(result, ensure_ascii=False, indent=2)

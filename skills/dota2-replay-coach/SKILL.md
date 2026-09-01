@@ -21,7 +21,7 @@ Use direct Chinese, practical “if…then…” rules, small tables, and concre
 
 ## Workflow
 
-1. Identify the controlling artifact. Prefer the local parsed replay JSON; if only a `.dem` exists, locate an installed Dota replay parser and record its version. Do not pretend a parser can recover camera, cursor, hidden information, or player intent.
+1. Identify the controlling artifact. Prefer the local parsed replay JSON; if only a `.dem` exists, locate an installed Dota replay parser and record its version. Do not pretend a parser can recover camera, cursor, hidden information, or player intent. Before trusting any derived metric, read [references/data-traps.md](references/data-traps.md) — it lists known field-level traps (zeroed `gold_t`, fake `item_ward_dispenser` purchases, cross-team lane_adv pairing, reincarnation pseudo-deaths, tick-based purchase events, `ability_level` always 0 on DAMAGE) and proven forensic recipes (duel ledgers, teamfight clustering, drop tracking via net-worth jumps, position tolerance matching, counter-purchase audits).
 2. Run `scripts/extract_match_facts.py` for a compact, reproducible fact bundle. Pass the player's hero explicitly and optionally change checkpoint minutes; never assume a role, team, or hero index. For the current project, `analyze_necro.py` and `build_richer_report.py` are specialized examples, not universal rules.
 3. Validate basic invariants before coaching: ten players, match ID, duration, scoreboard K/D/A, player death count, hero damage, and whether `draft` is present. Mark missing draft/order as a caveat; if BP order is unavailable, ask for the user's remembered pick context or give a conditional comparison instead of inventing it.
 4. Produce the coaching analysis in this order:
@@ -30,11 +30,14 @@ Use direct Chinese, practical “if…then…” rules, small tables, and concre
    - Four stages: 0–10, 10–20, 20–30, and late game. For each, cite one fact, classify the biggest error, and give one next action.
    - Teamfights: reduce attention to 2–3 enemy heroes and their decisive spells. Before entry ask: who is missing, what key spell is unused, can I reach the target without crossing the whole enemy team, and where is my exit?
    - Deaths: classify each important death as information, positioning, target, timing, item/resource, or lane/economy error. Separate controllable actions from teammate-dependent actions and from deaths not worth taking.
-   - Items: explain the problem each item solves. Compare defensive control immunity, save/escape, disarm/anti-right-click, and damage; do not give a fixed build template.
+   - Items: explain the problem each item solves. Compare defensive control immunity, save/escape, disarm/anti-right-click, and damage; do not give a fixed build template. Run the counter-purchase audit first (enemy dust/sentry/gem counts from the fact bundle's `detection_purchases_by_player`): judge invisibility items against actual enemy detection, not in a vacuum.
    - Conversion: after kills, check tower, Roshan, wave, vision, buyback, and TP decisions. A kill without map value is not automatically an advantage.
-5. End with only 2–3 drills for the next ten games. Prefer observable checks such as “was the key defensive spell available in the final six seconds?” over vague advice.
+5. Cross-game loop: if previous reports for this player exist in the workspace, open them and check whether the last session's 2–3 drills were executed (item timing, defensive item activation count, target priority). Report explicitly which homework was done and which regressed — this loop is the single highest-value coaching feature across sessions. Recurring patterns across 3+ games (e.g. defensive item always too late, ultimate never aimed at the enemy's fattest core) outrank any single-game mistake in priority.
+6. End with only 2–3 drills for the next ten games. Prefer observable checks such as “was the key defensive spell available in the final six seconds?” over vague advice.
 
 For a hero-specific lesson, answer the practical questions rather than reciting a build: first ten-minute lane plan; heroes to pressure or avoid; when to farm versus seek a kill; target priority; exact ordering of movement, defensive spells, active items, and ultimate; and how the plan changes against saves, hard control, a backline artillery hero, or a durable core. For items, state “problem → candidate item → why now → what would make me switch,” and judge the player's actual order instead of merely describing it.
+
+When the draft data is available (or the user describes the BP), add a counter-lesson: did the enemy lineup target the player's hero (save supports, counter-initiation, break sources, kiting)? If yes, name 1–2 same-position swap heroes that dodge the counters and state the pick signal (e.g. “enemy has 2+ save supports → this hero's lockdown loses value”). If the player's hero was contested or banned, outline a small hero pool (2–3 same-position heroes with overlapping item/build logic) instead of a single fallback.
 
 For teamfights, never ask the player to track ten heroes. Name only 2–3 enemy heroes and their decisive spells. Before entry, make the player answer: who is missing, what key spell is unused, can I reach the target without crossing the whole enemy team, can my team follow, and where is my exit? After the fight, state whether the correct action was continue, reset, or convert to tower/Roshan/wave/vision.
 
@@ -43,10 +46,6 @@ When reviewing a screenshot or replay, do not dump every available metric. Start
 ## Token budget
 
 Never send the binary `.dem` to the model and do not paste the full parsed combat log unless explicitly needed for a narrow forensic question. A typical 40-minute parsed JSON can be 50–80 MB (roughly 15–25 million tokens depending on formatting and language), which is wasteful. Use the extractor first: its compact fact bundle is usually tens of thousands of bytes (roughly 15–25k tokens in pretty JSON, less when minified). For a normal report, send the fact bundle plus only 2–4 selected death/teamfight windows; a practical target is 8–20k input tokens and 3–8k output tokens. If the report contains charts, keep their datasets in the artifact snapshot, not duplicated in the coaching prompt.
-
-## Performance budget and caching
-
-Use a cheap triage pass before downloading or parsing a DEM: OpenDota/Dota2ProTracker metadata can establish duration, roster, score, role, purchases, and draft caveats. Download and parse only when a question needs spell order, target, positioning, or a precise fight window. Cache by match ID, replay checksum, and parser version; never re-parse an unchanged DEM or regenerate the full report for a wording-only correction. Reuse one compact fact bundle and one ranked list of decision-relevant windows instead of repeated ad-hoc JSON scans. Keep validation output to pass/fail plus errors, and deploy Sites once after the Markdown judgments are stable. Record approximate elapsed time for download, decompression, parse, extraction, analysis, and publish so the user can see where latency and tokens went.
 
 ## Low-MMR operating rules
 
