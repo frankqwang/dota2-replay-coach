@@ -97,7 +97,7 @@ mvn -s <settings.xml> -B -DskipTests package      # produces target/dota-lc-pars
 ```
 
 Dependencies come from Maven Central: `com.skadistats:clarity:5.0.1` +
-`com.skadistats:clarity-protobuf:7.x`. See [agent-adapters.md](agent-adapters.md) §4 for the
+`com.skadistats:clarity-protobuf:7.x`. See [agent-adapters.md](agent-adapters.md) §3 for the
 "mirror missing a jar → fetch from `repo1.maven.org`" workaround.
 
 ### C.2 Run

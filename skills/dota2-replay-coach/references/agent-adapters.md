@@ -1,11 +1,14 @@
-# Agent adapters — the only place agent- and model-specific details live
+# Agent adapters — agent- and model-specific details
 
-`SKILL.md` is deliberately tool-agnostic: it only names **capabilities**. This file maps those
-capabilities to real tools, budgets, and platform quirks for specific agents/models. If you are an
-agent running this skill, read this file once, resolve the mapping for *yourself*, and then forget
-the tool names — do the analysis in capability terms.
+`SKILL.md` only names **capabilities**. This file covers the things that genuinely differ between
+agents and models: how much context to spend, and what has to be installed first.
 
-> Adding a new agent? Append a row to the tables below; do not touch `SKILL.md`.
+There is deliberately **no tool-name table**. You already know which tools you have; look at the
+capability names in `SKILL.md` and use your own equivalent. A mapping table would be stale the
+moment any agent renamed a tool, and it would be read as authoritative — worse than no table.
+
+> Adding a new agent? There is usually nothing to add here. If your agent has a quirk worth
+> recording (a sandbox restriction, a missing runtime), add it under §3.
 
 ---
 
@@ -16,40 +19,24 @@ whole pipeline.
 
 | Capability | What it is used for |
 |---|---|
-| `read_file` | read parsed JSON, position CSV, previous reports, `hero_cn.json` / `items_id.json` |
-| `write_file` | write the fact bundle, the Markdown report, generated CSVs/HTML |
-| `run_shell` | run the Python scripts, `git`, and (for the coordinate parser) `java` / `mvn` |
-| `http_fetch` | OpenDota API calls, replay download from Valve CDN |
+| read a file | the parsed JSON, the position CSV, previous reports |
+| write a file | the fact bundle, the Markdown report, generated CSVs/HTML |
+| run a shell command | the Python scripts, `git`, and (for the coordinate parser) `java` / `mvn` |
+| make an HTTP request | OpenDota API calls, replay download from Valve CDN |
 
 Optional capabilities the skill *uses if present, otherwise degrades*:
 
-| Optional capability | Enhances | Degrades to |
+| Optional capability | Enhances | If absent |
 |---|---|---|
-| inline visualizer (chart/diagram) | showing lane/distance charts in-chat | embed a chart into the report file |
-| static-site / artifact publishing | shareable link | a local Markdown or HTML file |
-| background/long-running task runner | 3–10 min parse jobs | run in foreground |
+| inline chart / diagram rendering | showing lane and distance charts in-chat | embed the chart into the report file |
+| publishing a shareable link | a URL the user can open | hand back a local Markdown or HTML file |
+| a background/long-running job runner | 3–10 min parse jobs | run in the foreground |
 
 ---
 
-## 2. Tool-name mapping
+## 2. Token & model budgets
 
-| Capability | WorkBuddy | Claude Code | Cursor / Windsurf | Codex CLI | Generic bash agent |
-|---|---|---|---|---|---|
-| `read_file` | `Read` | `Read` | `Read` | shell `cat`/`sed` | `cat` |
-| `write_file` | `Write` / `Edit` | `Write` / `Edit` | `Write` / `Edit` | shell heredoc | `cat >` |
-| `run_shell` | `Bash` (Git Bash) / `PowerShell` | `Bash` | `Bash` | its sandbox shell | `bash` |
-| `http_fetch` | `WebFetch` / `WebSearch` | `WebFetch` | `WebFetch` | `curl` | `curl` |
-| background job | `Bash` with `run_in_background` + `TaskOutput` | `Bash` `&` + `wait` | terminal | `&` | `nohup … &` |
-| inline visual | `show_widget` (SVG/HTML) | Artifact | preview | — | — |
-| share / publish | `present_files` (+ optional Sites deploy) | Artifact link | — | — | local file |
-
-If your agent is not listed: you need file read/write, a shell, and HTTP. That is sufficient.
-
----
-
-## 3. Token & model budgets
-
-The point of the fact bundle is to keep the *analysis* prompt small. Adjust the target to your
+The point of the fact bundle is to keep the *analysis* prompt small. Scale the target to your
 model's context window; when in doubt, send less and query the raw JSON on demand.
 
 | Model / window | Suggested input per report | Notes |
@@ -64,7 +51,7 @@ The extractor's compact bundle is the contract.
 
 ---
 
-## 4. Runtime prerequisites (per OS)
+## 3. Runtime prerequisites and sandbox gotchas
 
 The parsers are Python (gem-dota / scripts) and Java (clarity). Install only what the path you
 choose needs — see [parse-pipeline.md](parse-pipeline.md) for which path to pick.
@@ -86,33 +73,3 @@ choose needs — see [parse-pipeline.md](parse-pipeline.md) for which path to pi
 - Corporate/large-artifact mirrors may be **missing specific jars** (observed: an Aliyun mirror had
   the `clarity` *pom* but not the *jar*). If a build fails on a missing artifact, fetch it directly
   from Maven Central (`repo1.maven.org`) instead of the mirror.
-
----
-
-## 5. Publishing / sharing matrix
-
-The skill produces Markdown first (fast to verify). "Share" is then whatever your agent supports:
-
-| Agent | Recommended share path |
-|---|---|
-| WorkBuddy | `present_files` to show the report; optionally deploy a validated static package as a hosted site |
-| Claude Code | an Artifact, or write a self-contained `report.html` |
-| Cursor / Windsurf | open the HTML in the editor preview |
-| Codex CLI / generic | leave a local `report.html` / `.md`; tell the user the path |
-
-Encoding gate is universal and lives in `SKILL.md` (UTF-8 end to end for any HTML/JSON).
-
----
-
-## 6. Worked example — the reference environment this skill was built on
-
-This is **one** concrete setup, included so you can copy the shape, not as a requirement:
-
-- Agent: WorkBuddy on Windows 11; shell is Git Bash; a sandboxed bash plus a `PowerShell` tool.
-- Python for parsing: a dedicated venv, e.g. `…/python/envs/dota/Scripts/python.exe`.
-- Java: Temurin JDK 21 at `C:/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot`.
-- Maven: portable 3.9.9 unpacked under the project's `tools/`, with a `settings.xml` pointing at a
-  regional mirror for speed (and manual `repo1.maven.org` fetches for the two jars the mirror lacked).
-- Publish: `present_files` for the report; coordinate parser output kept as a CSV artifact.
-
-Translate to your own paths; none of the above is load-bearing for the *method*.
