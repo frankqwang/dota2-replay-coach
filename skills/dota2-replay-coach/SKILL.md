@@ -53,7 +53,7 @@ When reviewing a screenshot or replay, do not dump every available metric. Start
 
 ### Per-tick coordinates (from the bundled coordinate parser)
 
-The coordinate parser outputs one row every ~0.5 s per hero: `gametime,tick,index,dtname,team,heroid,x,y,hp,maxhp,level,lifestate`. **`gametime` here is raw `tick/30`, not the in-game clock** — calibrate by aligning the hero's death moments with scoreboard deaths, then subtract the constant offset. This is what lets you answer "how far was my nearest ally when I died", the single most decisive evidence for split-push and loner-death questions. Report teammate distances in game units (attack range ≈ 600, tower ≈ 700; treat > 2000 as "team disconnected").
+The coordinate parser outputs one row every ~0.5 s per hero: `gametime,tick,index,dtname,team,heroid,x,y,hp,maxhp,level,lifestate`. **`gametime` here is raw `tick/30`, not the in-game clock** — calibrate by aligning the hero's death moments with scoreboard deaths, then subtract the constant offset. `scripts/ticks_coach.py` does the whole job and is hero-agnostic: it derives hero names from `dtname`, sides from `team`, collapses illusion entities to the smallest index per hero, solves the offset by median when you pass `--death-times`, refuses to print derived timings when the alignment fails, and picks the player's body with `--me`. This is what lets you answer "how far was my nearest ally when I died", the single most decisive evidence for split-push and loner-death questions. Report teammate distances in game units (attack range ≈ 600, tower ≈ 700, XP range ≈ 1300; treat > 2000 as "team disconnected").
 
 ## Token budget
 
@@ -83,4 +83,4 @@ Then offer to share. **What "share" means is agent-dependent** — a static HTML
 | [references/data-contract.md](references/data-contract.md) | Building or adapting the fact bundle |
 | [references/agent-adapters.md](references/agent-adapters.md) | At the start, to learn your agent's tools, token budget, and publishing options |
 
-Scripts: `scripts/fetch_replay.py`, `scripts/query_parsed.py`, `scripts/extract_match_facts.py`, `scripts/clarity/` (Java source for the coordinate parser).
+Scripts: `scripts/fetch_replay.py` (download + decompress), `scripts/query_parsed.py` (targeted queries on the parsed JSON), `scripts/extract_match_facts.py` (compact fact bundle), `scripts/ticks_coach.py` (per-tick coordinate analysis), `scripts/clarity/` (Java source for the coordinate parser).

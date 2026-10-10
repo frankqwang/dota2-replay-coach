@@ -122,10 +122,24 @@ java -Xmx3g -jar target/dota-lc-parse.jar <replay.dem> <out.csv> [sampleEveryTic
 ### C.4 Calibrate the clock (required)
 
 `gametime` is exported as raw `tick/30`, **not** the in-game clock (`m_pGameRules.m_fGameTime` is
-often unreadable). Align it against known events: find the hero's death moments in the CSV and match
-them to the scoreboard/OpenDota death times. The constant offset `k` satisfies
-`real_seconds = csv_gametime − k`; verify it reproduces **all** death timestamps to ≤1 s before
-using any derived number.
+not readable through clarity on current builds). Align it against known events: find the hero's death
+moments in the CSV and match them to the scoreboard/OpenDota death times. The constant offset `k`
+satisfies `real_seconds = csv_gametime − k`.
+
+`scripts/ticks_coach.py` automates this and is **hero-agnostic** — no hero index, roster, or offset
+is hard-coded:
+
+```
+python scripts/ticks_coach.py <out.csv> --me legion_commander --death-times 87,1085,1972,...
+python scripts/ticks_coach.py <out.csv> --list-heroes        # what is in this CSV?
+python scripts/ticks_coach.py <out.csv> --me <hero> --offset 229   # skip solving
+```
+
+It derives hero names from `dtname`, sides from `team`, collapses illusion entities to the smallest
+`index` per hero, solves `k` by **median** (so one bad death time cannot skew the clock), reports
+each window's residual, and prints an explicit "team present / adjacent / alone" verdict per death
+from the nearest-ally distance. If a clear majority of deaths fail to align, it suppresses the
+derived timings rather than printing numbers it cannot stand behind.
 
 ---
 

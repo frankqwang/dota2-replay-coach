@@ -1,7 +1,12 @@
-# Data traps and forensic recipes (gem-dota parsed replays)
+# Data traps and forensic recipes
 
 Accumulated from real analysis sessions. Read before trusting any derived metric.
-These apply to the parsed JSON shape used by `extract_match_facts.py`.
+
+Two data shapes are covered:
+
+- **§Traps / §Forensic recipes** — the parsed **event JSON** (gem-dota path, OpenDota's
+  `teamfights`/`kills_log`), which is what `extract_match_facts.py` consumes.
+- **§Per-tick coordinate CSV** — the **clarity path** output, which has its own failure modes.
 
 ## Traps (things that produce wrong conclusions if used naively)
 
@@ -97,3 +102,14 @@ These apply to the parsed JSON shape used by `extract_match_facts.py`.
 16. **Death-cause must come from the event log, not the CSV.** The coordinate CSV shows *where* and
     *when*, never *who* or *what killed you*. Pair it with the parsed JSON's DEATH events (or OpenDota
     `killed_by`) to name the killer; do not infer the killer from proximity alone.
+
+17. **A sampled death window can miss the real death second.** `lifestate >= 1` marks the *dying*
+    window, so the first transition is at or after the true death. In one verified match every
+    window aligned within 0.5 s except one that was ~8 s off — an illusion body or a revive inside
+    the sampling gap. **Solve the clock offset by median, not mean**, and treat the odd window as an
+    outlier instead of letting it shift the offset for the whole match (`ticks_coach.py` does this).
+
+18. **Never hard-code a hero index, team roster, or offset into an analysis script.** Hero entity
+    indices differ every match, and the clock offset differs by game-start time. Both must be read
+    from the CSV (`dtname` / `team`) or passed as arguments. A script that only works on one match
+    is not reusable and silently mislabels any other match.

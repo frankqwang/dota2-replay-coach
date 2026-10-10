@@ -22,7 +22,6 @@ import java.util.Map;
 @UsesEntities
 public class ReplayDump {
 
-    private Entity gamerules;
     private final Map<Integer, Entity> heroesByIndex = new LinkedHashMap<>();
     private PrintWriter out;
     private int tick = 0;
@@ -39,8 +38,6 @@ public class ReplayDump {
         }
         if (n.startsWith("CDOTA_Unit_Hero_")) {
             heroesByIndex.put(e.getIndex(), e);
-        } else if (n.equals("CDOTAGamerulesProxy")) {
-            gamerules = e;
         }
     }
 
@@ -53,13 +50,10 @@ public class ReplayDump {
     }
 
     private double gameTime() {
-        if (gamerules != null) {
-            try {
-                Object o = gamerules.getProperty("m_pGameRules.m_fGameTime");
-                if (o instanceof Number) return ((Number) o).doubleValue();
-            } catch (Exception ignored) {
-            }
-        }
+        // m_pGameRules.m_fGameTime is not readable through clarity on current builds, so the
+        // raw demo clock (tick / 30) is exported instead. It is NOT the in-game clock: the
+        // difference is a constant offset (game start plus any pre-game time) that must be
+        // solved per match by aligning death moments with the scoreboard. See ticks_coach.py.
         return tick / 30.0;
     }
 
@@ -101,6 +95,10 @@ public class ReplayDump {
     }
 
     public void run(String[] args) throws Exception {
+        if (args.length < 1) {
+            System.err.println("usage: java -jar dota-lc-parse.jar <replay.dem> [out.csv] [sampleEveryTicks]");
+            System.exit(2);
+        }
         String replay = args[0];
         String outPath = args.length > 1 ? args[1] : null;
         if (args.length > 2) sampleEvery = Integer.parseInt(args[2]);

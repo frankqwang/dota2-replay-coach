@@ -50,8 +50,7 @@ skills/dota2-replay-coach/
     ├── fetch_replay.py            # 下载 + 解压录像（按魔数识别 zstd/bzip2）
     ├── query_parsed.py            # 定向查询（players / kills / items / nw）
     ├── extract_match_facts.py     # 抽取精简事实包（给模型看的）
-    ├── ticks_report.py            # 逐 tick 坐标 -> 英雄/队伍/轨迹
-    ├── ticks_deep.py              # 逐 tick 坐标 -> 对线对手 + 死亡态势 + 死亡前轨迹
+    ├── ticks_coach.py             # ★ 逐 tick 坐标分析（英雄无关，自动校准时钟）
     └── clarity/                   # ★ 逐 tick 坐标解析器（Java，Maven 工程）
         ├── pom.xml
         └── ReplayDump.java
@@ -66,7 +65,22 @@ java -Xmx3g -jar target/dota-lc-parse.jar <replay.dem> <out.csv> 15
 ```
 
 输出：`gametime,tick,index,dtname,team,heroid,x,y,hp,maxhp,level,lifestate`（每约 0.5 秒一行）。
-注意 `gametime` 是原始 `tick/30`，需要按死亡时刻对齐校准后再用——详见 `parse-pipeline.md`。
+注意 `gametime` 是原始 `tick/30`，需要按死亡时刻对齐校准后再用。
+
+```bash
+# 1) 看这把有哪些英雄
+python scripts/ticks_coach.py <out.csv> --list-heroes
+
+# 2) 校准时钟 + 逐次死亡态势（传入计分板的真实死亡时刻）
+python scripts/ticks_coach.py <out.csv> --me legion_commander --death-times 87,1085,1972
+
+# 3) 或直接给定偏移量跳过校准
+python scripts/ticks_coach.py <out.csv> --me legion_commander --offset 229
+```
+
+`ticks_coach.py` 是**英雄无关**的：英雄名从 `dtname` 推导、阵营从 `team` 推导、幻象按最小
+`index` 收敛到本体、偏移量用**中位数**求解（单次死亡时刻记错不会污染整局），并对每次死亡给出
+「团战 / 迟到支援 / 落单」的判定。校准不上时它会**拒绝输出**派生时间，而不是给出不可信的数字。
 
 ## 关于成本
 

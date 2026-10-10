@@ -1,15 +1,19 @@
 #!/usr/bin/env python
-"""fetch_replay.py -- 按 match_id 下载 Dota2 录像并解压为 .dem
+"""fetch_replay.py -- download a Dota 2 replay by match id and decompress it to .dem
 
-必须用 Python 3.14+ 运行（需要 compression.zstd）：
-  C:/Users/Administrator/AppData/Local/Python/bin/python.exe fetch_replay.py <match_id> [out_dir]
+Requires Python 3.14+ (uses `compression.zstd` from the standard library). If you are on
+an older Python, install the `zstandard` package and swap the import below.
 
-流程：
-1. GET OpenDota /api/matches/{id}；若 replay_url 已有直接用（常见，缓存命中）
-2. 否则 POST /api/request/{id} 触发 retriever，轮询至 replay_url 回填（最长 ~120s）
-3. 下载 .dem.bz2，按魔数识别真实压缩格式（zstd=28b52ffd / bzip2=BZh）并解压
-4. 校验文件头 PBDEMS2，同时把 OpenDota 元数据存为 od_<id>.json
-输出：<out_dir>/<match_id>.dem （out_dir 默认当前目录）
+  python fetch_replay.py <match_id> [out_dir]
+
+Steps:
+1. GET OpenDota /api/matches/{id}; reuse `replay_url` when already present (common: cache hit)
+2. otherwise POST /api/request/{id} to trigger the retriever and poll until `replay_url` is
+   filled in (up to ~120s)
+3. download the replay and detect the real compression by MAGIC BYTES, not by extension
+   (zstd = 28 b5 2f fd, bzip2 = BZh); Valve serves zstd data under a `.bz2` name
+4. verify the `PBDEMS2` header, and save the OpenDota metadata as od_<id>.json
+Output: <out_dir>/<match_id>.dem  (out_dir defaults to the current directory)
 """
 import json
 import sys

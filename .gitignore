@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Maven / Java build output (the clarity parser is built locally)
+target/
+*.class
+*.jar
+
+# Replay artifacts — large, machine-specific, or regenerable
+*.dem
+*.dem.bz2
+od_*.json
+parsed_*.json
+ticks_*.csv
+match_facts*.json
+
+# Reports are fine to commit; scratch output is not
+*.tmp
+*.log
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

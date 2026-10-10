@@ -1,14 +1,15 @@
 #!/usr/bin/env python
-"""query_parsed.py -- 对 gem 解析出的 parsed JSON 做定向查询，避免把 100MB+ JSON 读进对话
+"""query_parsed.py -- targeted queries against a parsed replay JSON.
 
-用 dota venv 运行：
-  C:/Users/Administrator/.workbuddy/binaries/python/envs/dota/Scripts/python.exe query_parsed.py <parsed.json> <子命令> ...
+Keeps a 100 MB+ parsed JSON on disk instead of in the conversation.
 
-子命令：
-  players                     十人总览（英雄/阵营/lane_role/KDA/对线优劣势/经济）
-  kills    --hero <hero_key>  该英雄对英雄的击杀与阵亡时间线（自动过滤小兵）
-  items    --hero <hero_key>  装备购买时间线（value_name + game_time_s，自动跳过 None）
-  nw       --min 5            各玩家净资产曲线（每 --min 分钟采样，默认 5）
+  python query_parsed.py <parsed.json> <subcommand> ...
+
+Subcommands:
+  players                     ten-player overview (hero / side / lane_role / KDA / economy)
+  kills   --hero <hero_key>   that hero's kill and death timeline (creeps filtered out)
+  items   --hero <hero_key>   purchase timeline (value_name + game_time_s, None skipped)
+  nw      --min 5             net-worth curve per player, sampled every --min minutes
 """
 import argparse
 import json
