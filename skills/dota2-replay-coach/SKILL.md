@@ -1,6 +1,6 @@
 ---
 name: dota2-replay-coach
-description: "Turn Dota 2 replay data (a .dem file, a parsed replay JSON, or a match ID) into practical coaching reports: BP fit, lane plan, economy windows, teamfights, deaths, item purpose, target priority, and map conversion. Parsing is bundled and agent-agnostic."
+description: "Turn Dota 2 replay data (a .dem file, a parsed replay JSON, or a match ID) into practical coaching reports: BP fit, lane plan, economy windows, teamfights, deaths, item purpose, target priority, and map conversion. Replay parsing is bundled."
 ---
 
 # Dota 2 Replay Coach
@@ -9,11 +9,11 @@ Use this skill when the user provides a `.dem` file, a parsed replay JSON, a mat
 
 ## Environment contract (read this first)
 
-This skill is **agent-agnostic**. It assumes only these capabilities from the executing agent:
+Assume only these capabilities from the executing agent:
 
 1. Read a file, 2. write a file, 3. run a shell command, 4. make an HTTP request.
 
-Everywhere below, "run", "read", "write", "fetch" mean *use whatever tool your agent provides for that capability*. The concrete tool names, sandbox quirks, token budgets, and report-publishing options differ per agent and per model — they are kept in **[references/agent-adapters.md](references/agent-adapters.md)**. Read that file once at the start so you know your own limits; do not hard-code any tool name into the analysis.
+Everywhere below, "run", "read", "write", "fetch" mean *use whatever tool your agent provides for that capability*. Concrete tool names, sandbox quirks, token budgets, and report-publishing options vary per agent and per model — they live in **[references/agent-adapters.md](references/agent-adapters.md)**. Read that file once at the start so you know your own limits; do not hard-code any tool name into the analysis.
 
 ## Coaching contract
 

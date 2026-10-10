@@ -1,17 +1,9 @@
 # dota2-replay-coach
 
-一个 **agent 无关**的 Dota 2 复盘 skill：给它一个比赛 ID（或 `.dem` 录像），它自动完成
-**下载录像 → 解析 → 生成可核对的教练报告**，然后回答你关心的任何问题（团战、走位、击杀、出装……）。
+给一个比赛 ID（或 `.dem` 录像），自动完成**下载录像 → 解析 → 生成可核对的教练报告**，
+然后回答你关心的任何问题（团战、走位、击杀、出装……）。
 
-## 为什么叫 "agent 无关"
-
-`SKILL.md` 里**不出现任何具体工具名**，只声明它需要的 4 项能力：读文件、写文件、跑命令、发 HTTP 请求。
-不同 agent / 模型之间的差异（工具名、token 预算、沙箱限制、发布方式、运行环境）**全部集中在单独一份文档**：
-
-> [`skills/dota2-replay-coach/references/agent-adapters.md`](skills/dota2-replay-coach/references/agent-adapters.md)
-
-这样同一份 skill 可以跑在 WorkBuddy / Claude Code / Cursor / Codex CLI 或任何有 shell 的 agent 上，
-新增一个 agent 只需要在那份文档里**加一行表格**，不用动主流程。
+适用于任何支持 skill 的 AI 编程助手，不绑定特定工具。
 
 ## 安装
 
@@ -40,17 +32,17 @@
 
 ```
 skills/dota2-replay-coach/
-├── SKILL.md                       # 主流程（agent 无关，只谈能力不谈工具名）
+├── SKILL.md                       # 主流程
 ├── references/
-│   ├── agent-adapters.md          # ★ agent/模型差异（工具映射、token 预算、发布方式、环境）
 │   ├── parse-pipeline.md          # 三条解析路径的完整操作与坑
 │   ├── data-traps.md              # 数据陷阱与取证配方（读任何指标前必看）
-│   └── data-contract.md           # 事实包（fact bundle）的字段契约
+│   ├── data-contract.md           # 事实包（fact bundle）的字段契约
+│   └── agent-adapters.md          # 适配说明（工具映射、token 预算、发布方式）
 └── scripts/
     ├── fetch_replay.py            # 下载 + 解压录像（按魔数识别 zstd/bzip2）
     ├── query_parsed.py            # 定向查询（players / kills / items / nw）
     ├── extract_match_facts.py     # 抽取精简事实包（给模型看的）
-    ├── ticks_coach.py             # ★ 逐 tick 坐标分析（英雄无关，自动校准时钟）
+    ├── ticks_coach.py             # ★ 逐 tick 坐标分析（自动校准时钟）
     └── clarity/                   # ★ 逐 tick 坐标解析器（Java，Maven 工程）
         ├── pom.xml
         └── ReplayDump.java
@@ -78,9 +70,9 @@ python scripts/ticks_coach.py <out.csv> --me legion_commander --death-times 87,1
 python scripts/ticks_coach.py <out.csv> --me legion_commander --offset 229
 ```
 
-`ticks_coach.py` 是**英雄无关**的：英雄名从 `dtname` 推导、阵营从 `team` 推导、幻象按最小
-`index` 收敛到本体、偏移量用**中位数**求解（单次死亡时刻记错不会污染整局），并对每次死亡给出
-「团战 / 迟到支援 / 落单」的判定。校准不上时它会**拒绝输出**派生时间，而不是给出不可信的数字。
+`ticks_coach.py` 会自动识别这把的英雄与阵营、把幻象归到本体、用**中位数**求解时钟偏移
+（单次死亡时刻记错不会污染整局），并对每次死亡给出「团战 / 迟到支援 / 落单」的判定。
+校准不上时它会**拒绝输出**派生时间，而不是给出不可信的数字。
 
 ## 关于成本
 
