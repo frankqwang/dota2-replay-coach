@@ -21,6 +21,42 @@ Use direct Chinese, practical “if…then…” rules, small tables, and concre
 
 ## Workflow
 
+### Fast path (the common case: a match ID → a report)
+
+Run these in order from the repository root, with artifacts in `work/`. Each step is
+programmatic and costs no model tokens.
+
+```bash
+# 0) once: gem-dota in an isolated venv
+python -m venv .venv && . .venv/bin/activate && pip install gem-dota
+
+# 1) download + decompress the replay (skips if the .dem already exists)
+python scripts/fetch_replay.py <match_id> ./work
+
+# 2) parse to the full event JSON (~1–3 min for a 40-min game)
+python -m gem parse ./work/<match_id>.dem --format json \
+    --output ./work/parsed_<match_id>.json --no-banner
+
+# 3) build the SQLite index (~3 s) — this is the primary query interface
+python scripts/index_parsed.py ./work/parsed_<match_id>.json --info
+
+# 4) query it with SQL (table map: references/parsed-schema.md)
+sqlite3 ./work/parsed_<match_id>.db \
+  "SELECT hero_name, net_worth, last_hits FROM players ORDER BY net_worth DESC"
+
+# 4b) or build a compact bundle for a normal report (~tens of KB)
+python scripts/extract_match_facts.py --parsed ./work/parsed_<match_id>.json \
+    --hero <hero_key> --out ./work/facts_<match_id>.json
+```
+
+Then coach from the SQL results (plus the fact bundle if you built one). Only go to the
+per-tick clarity path when a claim needs positions that no event log can prove — e.g.
+"how far was my nearest ally when I died" (see [references/parse-pipeline.md](references/parse-pipeline.md) Path C).
+
+Path selection, prerequisites, and environment gotchas: **[references/parse-pipeline.md](references/parse-pipeline.md)**.
+
+### Detailed steps
+
 1. **Get replay data.** Prefer, in order: (a) an existing parsed replay JSON in the workspace; (b) the bundled pipeline — see **[references/parse-pipeline.md](references/parse-pipeline.md)**. The pipeline is programmatic (no model tokens) and yields either a full event JSON (gem-dota) or any entity field you ask clarity to emit. **clarity is a general entity reader, not just a coordinate tool** — the bundled dump is one class we wrote; `scripts/clarity/Survey.java` lists every entity class and field it can see, so check there before concluding a field is unavailable. Never claim a parser can recover camera, cursor, hidden information, or player intent. Before trusting any derived metric, read **[references/data-traps.md](references/data-traps.md)** — it lists known field-level traps (zeroed `gold_t`, fake ward-dispenser purchases, cross-team lane-adv pairing, reincarnation pseudo-deaths, tick-based purchase events, `ability_level` always 0 on DAMAGE, pause-aware per-tick offset calibration) and proven forensic recipes (duel ledgers, teamfight clustering, drop tracking, position tolerance matching, counter-purchase audits).
 2. **Index it, then query it.** Convert the parsed JSON to SQLite once with `scripts/index_parsed.py`; read **[references/parsed-schema.md](references/parsed-schema.md)** for the table map and sample queries, then **write your own SQL** to answer the question at hand. The index is the primary interface to event data — do not read the raw JSON into context.
 3. **Build a compact bundle if the context is tight.** `scripts/extract_match_facts.py` emits a small fact bundle (lineup, net-worth checkpoints, death contexts, teamfights, objectives) for a normal report. Pass the player's hero explicitly; never assume a role, team, or hero index. For per-tick coordinates, use `scripts/ticks_coach.py` (see parse-pipeline).

@@ -27,40 +27,23 @@
 
 ## 快速上手
 
-最常用的路径——给一个比赛 ID，出报告：
+流程是固定的四步：**下载录像 → 解析成事件 JSON → 建 SQLite 索引 → 用 SQL 取数出报告**。
+全程由脚本完成，**不吃模型 token**。
 
 ```bash
-# 0) 装 gem-dota（只需一次，建议独立 venv）
-python -m venv .venv && . .venv/bin/activate && pip install gem-dota
-
-# 1) 下载 + 解压录像（已有 .dem 就跳过）
-python skills/dota2-replay-coach/scripts/fetch_replay.py 9036564967 ./work
-
-# 2) 解析成完整事件 JSON（约 1–3 分钟，gem-dota）
-python -m gem parse ./work/9036564967.dem --format json \
-    --output ./work/parsed_9036564967.json --no-banner
-
-# 3) 建 SQLite 索引（约 3 秒），之后用 SQL 自由查
-python skills/dota2-replay-coach/scripts/index_parsed.py ./work/parsed_9036564967.json --info
-
-# 4) 或直接生成一份给模型看的精简事实包
-python skills/dota2-replay-coach/scripts/extract_match_facts.py \
-    --parsed ./work/parsed_9036564967.json \
-    --hero legion_commander --out ./work/facts_9036564967.json
-```
-
-第 3 步之后用 SQL 取数（表结构见 [`references/parsed-schema.md`](skills/dota2-replay-coach/references/parsed-schema.md)）：
-
-```bash
-sqlite3 ./work/parsed_9036564967.db \
+python skills/dota2-replay-coach/scripts/fetch_replay.py <match_id> ./work
+python -m gem parse ./work/<match_id>.dem --format json \
+    --output ./work/parsed_<match_id>.json --no-banner
+python skills/dota2-replay-coach/scripts/index_parsed.py ./work/parsed_<match_id>.json --info
+sqlite3 ./work/parsed_<match_id>.db \
   "SELECT hero_name, net_worth, last_hits FROM players ORDER BY net_worth DESC"
 ```
 
-把 `facts_*.json`（几十 KB）或 SQL 查询结果交给 AI，它就能出报告。需要"死亡时队友离我多远"
-这类只有坐标才能证明的问题时，再走下面的逐 tick 路径。
-
-更完整的路径选择、前置依赖与踩坑见
-[`references/parse-pipeline.md`](skills/dota2-replay-coach/references/parse-pipeline.md)。
+需要"死亡时队友离我多远"这类只有坐标才能证明的问题时，再走逐 tick 路径（见下）。
+**完整的命令序列、前置依赖与踩坑都在 skill 里**——这些是给 AI 执行用的，不是给人背的：
+[`SKILL.md`](skills/dota2-replay-coach/SKILL.md) ·
+[`references/parse-pipeline.md`](skills/dota2-replay-coach/references/parse-pipeline.md) ·
+[`references/parsed-schema.md`](skills/dota2-replay-coach/references/parsed-schema.md)
 
 ## 目录结构
 
@@ -99,50 +82,14 @@ skills/dota2-replay-coach/
 ## 逐 tick 坐标分析（clarity 路径）
 
 三条解析路径里，只有这一条能回答"**我死的那一刻，最近的队友离我多远**"——因为只有它有逐 tick 坐标。
-下面的命令都假设你**在仓库根目录**，产物放在 `work/`。
+门槛是它需要 **Java（一次编译，之后每把约 2 秒）**，不像前两条路径只依赖 Python。
 
-**1) 先建解析器**（一次性；之后解析一把录像约 2 秒）
+这条路做三件事：把录像导成逐 tick 坐标 CSV → 用计分板的死亡时刻**校准时钟**（CSV 里的时间是
+原始 `tick/30`，含暂停和赛前，必须先校准，且**每场独立**）→ 对每次死亡判定「团战 / 迟到支援 /
+落单」。校准不上时脚本会**拒绝输出**而不是给不可信的数字。
 
-```bash
-cd skills/dota2-replay-coach/scripts/clarity
-mvn -B -DskipTests package          # 依赖 com.skadistats:clarity:5.0.1（Maven Central）
-cd -                                # 回到仓库根目录
-```
-
-产物是 `skills/dota2-replay-coach/scripts/clarity/target/dota-lc-parse.jar`。
-没有 Maven 也可以直接对已构建的 jar 编译单个类（见 `references/parse-pipeline.md`）。
-
-**2) 导出逐 tick 坐标 CSV**
-
-```bash
-JAR=skills/dota2-replay-coach/scripts/clarity/target/dota-lc-parse.jar
-java -Xmx3g -jar $JAR work/9036564967.dem work/ticks_9036564967.csv 15
-```
-
-输出 `gametime,tick,index,dtname,team,heroid,x,y,hp,maxhp,level,lifestate`（每约 0.5 秒一行）。
-**`gametime` 是原始 `tick/30`，含暂停、含赛前时间，必须先校准**（下一步）。
-
-**3) 分析与校准**
-
-```bash
-CSV=work/ticks_9036564967.csv
-
-# 看这把有哪些英雄
-python skills/dota2-replay-coach/scripts/ticks_coach.py $CSV --list-heroes
-
-# 校准时钟 + 逐次死亡态势（传入计分板/OpenDota 的真实死亡时刻）
-python skills/dota2-replay-coach/scripts/ticks_coach.py $CSV \
-    --me legion_commander --death-times 87,1085,1972
-
-# 或直接给定偏移量跳过校准（偏移量是每场独立的，换局必须重算）
-python skills/dota2-replay-coach/scripts/ticks_coach.py $CSV \
-    --me legion_commander --offset 229
-```
-
-`ticks_coach.py` 会自动识别这把的英雄与阵营、把幻象归到本体、用**中位数**求解时钟偏移
-（单次死亡时刻记错不会污染整局），并对每次死亡给出「团战 / 迟到支援 / 落单」的判定。
-**校准不上时它会拒绝输出派生时间**，而不是给出不可信的数字——如果看到 `✗ offset NOT
-trustworthy`，说明传入的死亡时刻有问题，去核对而不是继续用。
+具体命令、编译方式与失败排查见
+[`references/parse-pipeline.md`](skills/dota2-replay-coach/references/parse-pipeline.md) 的 Path C。
 
 ## 关于成本
 
