@@ -23,6 +23,9 @@
    - **gem-dota** — 全量游戏事件 JSON（团战、技能、购买、伤害归因），适合事件级取证；
    - **clarity（Java，与 OpenDota 同款解析库）** — **逐 tick 英雄坐标**（每 0.5 秒 × 10 人），
      这是最独特的一路：它能回答 "我死的那一刻，最近的队友离我多远" 这类**只有坐标才能证明**的问题。
+     注意 clarity 读的是**整份实体图**（一场 46 分钟的比赛有 466 个实体类：10 个英雄、168 个技能、
+     227 个物品、每队 6288 个统计字段……），坐标只是我们写的那个 dump 类的输出；
+     需要什么字段可以用 `scripts/clarity/Survey.java` 探一下再自己取。
 3. **建索引**：把解析出的 JSON 转成 SQLite，之后由 AI 直接写 SQL 查询，**自由度更大**，
    不再受限于固定脚本能吐出的那几个指标。
 4. **出报告**：默认先给一份可核对的中文 Markdown 草稿（先讲 1–3 个胜负手，再展开 BP / 分阶段 /
@@ -45,9 +48,10 @@ skills/dota2-replay-coach/
     ├── index_parsed.py            # ★ 解析 JSON → SQLite，之后随便写 SQL 查
     ├── extract_match_facts.py     # 抽取精简事实包（给模型看的）
     ├── ticks_coach.py             # ★ 逐 tick 坐标分析（自动校准时钟）
-    └── clarity/                   # ★ 逐 tick 坐标解析器（Java，Maven 工程）
+    └── clarity/                   # ★ clarity 解析器（Java，Maven 工程）
         ├── pom.xml
-        └── ReplayDump.java
+        ├── ReplayDump.java        # 逐 tick 英雄坐标 CSV
+        └── Survey.java            # 探查：这把录像里有哪些实体类 / 字段
 ```
 
 ## 数据怎么查

@@ -9,12 +9,26 @@ Turn a **match ID** or a **`.dem` file** into data the coaching layer can use. T
 |---|---|---|---|---|
 | **A. OpenDota API** | OpenDota match JSON (per-minute arrays, teamfights, purchase log, `lane_pos` grid) | No — `lane_pos` is ~5 s-aggregated and loses time | free, no download | quick pass; or when local parsers can't read the replay build |
 | **B. gem-dota** | full event JSON (every game event: combat log, purchases, ability casts) | has `position_log`, but tick-based with offsets | ~2–3 min for a 40-min game | deep event forensics (duel ledgers, exact cast order, damage attribution) |
-| **C. clarity** | **per-tick hero CSV** (x, y, hp, level, every ~0.5 s × 10 heroes) | **Yes — true per-tick** | ~2 s parse after a one-time ~20 s build | lane positioning, split-push, "how far was my nearest ally when I died" |
+| **C. clarity** | **anything you write it to emit** — the bundled dump is a per-tick hero CSV, but it reads the whole entity graph | **Yes — true per-tick** | ~2 s parse after a one-time ~20 s build | lane positioning, split-push, "how far was my nearest ally when I died"; also any entity state the two JSON paths do not expose |
 
 **Rule of thumb:** B answers *what happened* (events). C answers *where everyone was* (geometry).
 They are complementary — run B for the event story and C when a positioning/lane/split-push claim
 needs proof. A and C/B disagree only in resolution, not in facts; when they agree (they should),
 you can state the finding with confidence.
+
+> **clarity is not "the coordinate parser" — that is just the one class we wrote.** clarity reads
+> the replay's *entire entity graph*, and the bundled `ReplayDump.java` only subscribes to hero
+> entities. A survey of one 46-minute match found **466 entity classes**: 10 heroes, 168 abilities,
+> 227 item instances, 16 NPC classes (creeps/towers/barracks), plus `CDOTA_PlayerResource`
+> (2,571 properties), `CDOTA_DataRadiant` / `CDOTA_DataDire` (6,288 properties each), and
+> `CDOTAGamerulesProxy`. A hero entity alone exposes **256 properties** (`m_iHealth`, `m_iMaxHealth`,
+> `m_iCurrentLevel`, 24 `m_vecAbilities.*` handles, `CBodyComponent.*` transform, flags…), and
+> `CDOTA_DataRadiant.m_vecDataTeam.NNNN.*` carries the scoreboard per player (net worth, last hits,
+> denies, hero/tower damage, stuns, healing, wards placed, camps stacked, buyback fields…).
+> So clarity *can* yield a full structured dump — it is just a **pull model** where you name the
+> fields, not a fixed schema. See "Explore what clarity can see" below before assuming a field is
+> unavailable. `gem-dota`'s JSON is the push model: someone already named the fields for you, which
+> is why it feels more "complete" and costs 2–3 minutes instead of 2 seconds.
 
 ---
 
@@ -97,9 +111,54 @@ python scripts/index_parsed.py <out_dir>/parsed_<id>.json    # ~3 s, 141 MB -> ~
 This is the only bundled path that yields true per-tick positions. It is a Java library (the same
 one OpenDota's own parser uses), so it tends to be the first to support new builds.
 
+> **Read this before concluding clarity "only does coordinates".** The class we ship
+> (`ReplayDump.java`) subscribes to hero entities and writes a coordinate CSV — that is a choice,
+> not a limit of the library. clarity replays the full entity graph, and you can read any field of
+> any entity. What you cannot do is get a ready-made JSON without naming fields (that is gem-dota's
+> job). If you need something not in the JSON paths, **check whether clarity exposes it** before
+> giving up — the process is below.
+
+### C.0 Explore what clarity can see (`Survey.java`)
+
+`scripts/clarity/Survey.java` is a discovery probe. It prints every entity class in the replay with
+instance counts, then the full property list (name + current value) for classes you name.
+
+```
+# inventory of every entity class
+java -cp target/dota-lc-parse.jar:target/classes lc.Survey <replay.dem>
+
+# inventory + property lists for the classes you care about
+java -cp target/dota-lc-parse.jar:target/classes lc.Survey <replay.dem> \
+     CDOTA_Unit_Hero_Legion_Commander CDOTA_DataRadiant CDOTA_DataDire
+```
+
+Prefixes work, so `CDOTA_Unit_Hero` matches whatever hero is in the match. Property values are a
+snapshot taken a few seconds in; the point is the *name list*, which is what you enumerate fields
+from. Measured on one 46-minute match: 466 entity classes — 10 hero classes, 168 ability classes,
+227 item instances, 16 NPC classes, `CDOTA_PlayerResource` (2,571 props),
+`CDOTA_Data{Radiant,Dire}` (6,288 props each), `CDOTAGamerulesProxy`, `CDOTATeam`, and so on.
+
+Field paths worth knowing (verified present):
+
+| Entity | Field | Meaning |
+|---|---|---|
+| hero | `m_iHealth` / `m_iMaxHealth` | HP |
+| hero | `m_iCurrentLevel` / `m_iCurrentXP` | level / XP |
+| hero | `m_iTeamNum` / `m_nHeroID` | side / hero id |
+| hero | `CBodyComponent.m_cellX/Y` + `m_vecX/Y` | position (`cell × 128 + vec`) |
+| hero | `m_vecAbilities.NNNN` | handles to that hero's ability entities |
+| hero | `m_lifeState` | `0` alive, `≥1` dying/dead |
+| Data{Radiant,Dire} | `m_vecDataTeam.NNNN.m_iNetWorth` | per-player net worth |
+| Data{Radiant,Dire} | `…m_iLastHitCount` / `m_iDenyCount` | last hits / denies |
+| Data{Radiant,Dire} | `…m_flHeroDamage` / `m_flTowerDamage` / `m_fStuns` / `m_fHealing` | combat stats |
+| Data{Radiant,Dire} | `…m_iObserverWardsPlaced` / `m_iSentryWardsPlaced` / `m_iCampsStacked` | support stats |
+| PlayerResource | `m_vecPlayerTeamData.NNNN.*` | per-slot K/D/A, level, streak, respawn timers, pick order |
+
+`m_vecDataTeam` slots are per-team (0–4). Combine with `m_iTeamNum` to map a hero to its stat row.
+
 ### C.1 Build once
 
-`scripts/clarity/` ships a minimal Maven project (`pom.xml` + `ReplayDump.java`).
+`scripts/clarity/` ships a minimal Maven project (`pom.xml` + `ReplayDump.java` + `Survey.java`).
 
 ```
 cd scripts/clarity
@@ -109,6 +168,14 @@ mvn -s <settings.xml> -B -DskipTests package      # produces target/dota-lc-pars
 Dependencies come from Maven Central: `com.skadistats:clarity:5.0.1` +
 `com.skadistats:clarity-protobuf:7.x`. See "Prerequisites" below for the
 "mirror missing a jar → fetch from `repo1.maven.org`" workaround.
+
+> **No Maven? You can still compile against the built jar.** The shaded jar already contains
+> clarity, so a single class compiles standalone:
+> ```
+> javac -nowarn -proc:none -cp target/dota-lc-parse.jar -d target/classes <YourFile>.java
+> java  -Xmx3g -cp "target/dota-lc-parse.jar:target/classes" <your.main.Class> <replay.dem>
+> ```
+> (Use `;` instead of `:` as the classpath separator on Windows.)
 
 ### C.2 Run
 
