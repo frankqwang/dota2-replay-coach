@@ -3,17 +3,7 @@
 给一个比赛 ID（或 `.dem` 录像），自动完成**下载录像 → 解析 → 生成可核对的教练报告**，
 然后回答你关心的任何问题（团战、走位、击杀、出装……）。
 
-适用于任何支持 skill 的 AI 编程助手，不绑定特定工具。
-
-## 安装
-
-把仓库地址丢给你的 AI，让它安装这个 skill；或手动把 `skills/dota2-replay-coach/` 放到你的 skill 目录：
-
-| Agent | 默认 skill 目录 |
-|---|---|
-| WorkBuddy | `~/.workbuddy/skills/` |
-| Claude Code | `~/.claude/skills/` |
-| 其他 / 通用 | 把 `SKILL.md` 与 `references/`、`scripts/` 放在一起，让 agent 读取即可 |
+把仓库地址丢给你的 AI，让它把这个 skill 装到它自己的 skill 目录即可。
 
 ## 它做什么
 
