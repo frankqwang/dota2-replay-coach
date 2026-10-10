@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """fetch_replay.py -- download a Dota 2 replay by match id and decompress it to .dem
 
-Requires Python 3.14+ (uses `compression.zstd` from the standard library). If you are on
-an older Python, install the `zstandard` package and swap the import below.
+zstd support: uses `compression.zstd` from the standard library on Python 3.14+, and
+falls back to the `zstandard` package (`pip install zstandard`) on older versions.
 
   python fetch_replay.py <match_id> [out_dir]
 
@@ -19,9 +19,20 @@ import json
 import sys
 import time
 import urllib.request
-import compression.zstd as zstd
 import bz2
 import pathlib
+
+# zstd decompression: prefer the stdlib module (Python 3.14+), fall back to the
+# `zstandard` package, and fail with a clear message if neither is present.
+try:
+    import compression.zstd as zstd          # Python 3.14+
+    _ZSTD_DECOMPRESS = zstd.decompress
+except ImportError:
+    try:
+        import zstandard as _zstandard       # pip install zstandard
+        _ZSTD_DECOMPRESS = _zstandard.ZstdDecompressor().decompress
+    except ImportError:
+        _ZSTD_DECOMPRESS = None
 
 API = "https://api.opendota.com/api"
 HEADERS = {"User-Agent": "Mozilla/5.0 (dota-replay-pipeline)"}
@@ -93,7 +104,9 @@ def main():
 
     print(f"[dl] {len(blob)/1e6:.1f} MB, 魔数 {blob[:4].hex()}")
     if blob[:4] == b"\x28\xb5\x2f\xfd":  # 实际是 zstd
-        dem = zstd.decompress(blob)
+        if _ZSTD_DECOMPRESS is None:
+            sys.exit("需要 zstd 解压支持：请用 Python 3.14+，或 `pip install zstandard`")
+        dem = _ZSTD_DECOMPRESS(blob)
     elif blob[:3] == b"BZh":
         dem = bz2.decompress(blob)
     else:

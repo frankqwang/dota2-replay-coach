@@ -6,7 +6,7 @@ old fixed-subcommand helper: instead of getting pre-chewed metrics, you compose 
 query the decision actually needs.
 
 ```
-python scripts/index_parsed.py <parsed.json> [out.db] [--info] [--force]
+python scripts/index_parsed.py <parsed.json> [out.db] [--info] [--keep-json] [--force]
 ```
 
 - Default output is `<parsed>.db` next to the JSON. `--info` prints the schema and

@@ -4,11 +4,13 @@ Accumulated from real analysis sessions. Read before trusting any derived metric
 
 Three data shapes are covered:
 
-- **§Traps / §Forensic recipes** — the parsed **event JSON** (gem-dota path, OpenDota's
+- **§Traps / §Forensic recipes** (traps 1–10) — the parsed **event JSON** (gem-dota path, OpenDota's
   `teamfights`/`kills_log`). These apply equally when you query the **SQLite index**
   (`index_parsed.py`) built from that JSON — the columns carry the same names and traps.
-- **§Per-tick coordinate CSV** — the **clarity path** output, which has its own failure modes.
-- Trap 19 (pause-aware time) applies to both the JSON and the index.
+- **§Per-tick coordinate CSV** (traps 11–18) — the **clarity path** output, which has its own
+  failure modes.
+- **Trap 19** (pause-aware time) is the one that spans both: it explains why tick-based event data
+  must subtract pauses per-event, and why the coordinate CSV can get away with a single constant.
 
 ## Traps (things that produce wrong conclusions if used naively)
 
@@ -86,6 +88,9 @@ Three data shapes are covered:
     unreadable, so the column is raw demo time. **Calibrate per match**: match the hero's death
     moments to scoreboard/OpenDota deaths and solve `real_seconds = csv_gametime − k`. Verify `k`
     reproduces *every* death to ≤1 s before computing anything. (Observed offset in one match: 229 s.)
+    The offset is per-match and absorbs that match's pause time into a single constant — which is
+    exactly why it must be re-solved per replay, and why it must be a *constant* fit verified
+    against all deaths (a bad fit shows up as some deaths aligning and others not — see trap 17).
 
 12. **A hero is not one entity.** Illusions/clones share the same DT class
     (`CDOTA_Unit_Hero_*`). Take the real body as the smallest/first `index` per hero per team, or
@@ -129,3 +134,10 @@ Three data shapes are covered:
     0.5 s with zero mean bias. **Do not add `pre_game_duration`** — that injects a constant ~90 s
     error. Pause windows live in `game_clock.pauses`; `index_parsed.py` applies this to every
     `combat_log`, `player_series`, and `player_events` time column.
+
+    **Why trap 11 survives this:** the coordinate CSV has no `game_clock` and no per-event
+    `game_time_s`, so there is nothing to subtract pause-by-pause against — but the *aggregate*
+    pause time is still a constant for a given match, and it is absorbed into the single solved
+    offset `k`. Fitting `k` against **all** deaths is what makes that safe: a wrong constant shows
+    up as deaths that align before the first pause and drift after it. Trap 19's formula is for
+    data that *has* tick + `game_clock`; trap 11's constant is for data that does not.
