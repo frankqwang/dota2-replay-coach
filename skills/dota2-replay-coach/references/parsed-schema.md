@@ -11,7 +11,9 @@ python scripts/index_parsed.py <parsed.json> [out.db] [--info] [--keep-json] [--
 
 - Default output is `<parsed>.db` next to the JSON. `--info` prints the schema and
   row counts — **run it first and read the output**; that dump is your map.
-- The JSON is never modified; delete and rebuild the `.db` any time.
+- The JSON is never modified; delete and rebuild the `.db` any time. The `.db` is a
+  derived artifact — keep `*.db` / `*.sqlite` out of version control (the repo's
+  `.gitignore` already does).
 - Conversion takes ~3 s and roughly halves the size (141 MB JSON → ~107 MB db).
 
 Query it however you like: `sqlite3 file.db "SELECT ..."`, Python's `sqlite3`,

@@ -7,96 +7,56 @@
 
 ## 它做什么
 
-1. **取数据**：根据比赛 ID 从 OpenDota 拿元数据与录像下载链接，下载 Valve 原始录像（或直接用客户端本地已有的 `.dem`）。
-2. **解析**（三条路径，按问题选）：
-   - **OpenDota API** — 免下载，分钟级聚合数据，适合快速过一遍；
-   - **gem-dota** — 全量游戏事件 JSON（团战、技能、购买、伤害归因），适合事件级取证；
-   - **clarity（Java，与 OpenDota 同款解析库）** — 读整份实体图，可按需导出**任意实体字段**。
-     仓库里自带的 dump 类输出的是**逐 tick 英雄坐标**（每 0.5 秒 × 10 人），这是三条路径里
-     唯一能回答 "我死的那一刻，最近的队友离我多远" 这类**只有坐标才能证明**的问题的数据。
+- **取数据**：按比赛 ID 从 OpenDota 拿元数据与录像链接，下载 Valve 原始录像（也用你客户端已有的 `.dem`）。
+- **解析**：三条路径按问题选——免下载的 OpenDota API、全量事件 JSON（gem-dota）、
+  逐 tick 实体状态（clarity）。三者互补：事件、几何，各答一类问题。
+- **建模**：把解析结果建成 SQLite，之后按你的问题自由取数，而不是只能拿到几个写死的指标。
+- **出报告**：默认先给一份可核对的中文 Markdown 草稿（先讲 1–3 个胜负手，再展开 BP /
+  分阶段 / 团战 / 死亡归类 / 出装 / 转化），确认后再考虑分享成网页。
 
-     注意：一场 46 分钟的比赛有 **466 个实体类**（10 个英雄、168 个技能、227 个物品，每队
-     6288 个统计字段……），坐标只是其中一个类的输出。需要别的字段就先探测：
-     `scripts/clarity/Survey.java`。
-3. **建索引**：把解析出的 JSON 转成 SQLite，之后由 AI 直接写 SQL 查询，**自由度更大**，
-   不再受限于固定脚本能吐出的那几个指标。
-4. **出报告**：默认先给一份可核对的中文 Markdown 草稿（先讲 1–3 个胜负手，再展开 BP / 分阶段 /
-   团战 / 死亡归类 / 出装 / 转化），确认后再考虑分享成网页。
+解析全部由程序完成，**不吃模型 token**；一次性动作，后续追问不会重复解析。
 
-解析是程序完成的，**不吃模型 token**；一次性动作，后续追问不会重复解析。
+## 它能回答什么
 
-## 快速上手
+| 问题 | 靠什么回答 |
+|---|---|
+| 这把输在哪几个决策上？ | 事件 JSON + SQL 取数 |
+| 我这次死亡是谁打的、打在什么上？ | 伤害归因（按来源分组） |
+| 死之前我手里的保命物品/技能用了没有？ | 物品与技能生效记录 |
+| 决斗（或大招）到底命中了几次、赢了几个？ | 技能事件 + 死亡事件配对 |
+| 出装对不对？对面有没有针对我的隐身？ | 购买日志 + 反隐购买审计 |
+| **我死的那一刻，最近的队友离我多远？** | 逐 tick 坐标（唯一能做到的路径） |
+| 我是落单死的，还是在团战里死的？ | 逐 tick 坐标自连接 |
 
-流程是固定的四步：**下载录像 → 解析成事件 JSON → 建 SQLite 索引 → 用 SQL 取数出报告**。
-全程由脚本完成，**不吃模型 token**。
+最后两条是分水岭：**只有 clarity 的逐 tick 坐标能证明位置**，其余问题用事件数据就够。
+坐标路径的门槛是需要 Java（一次编译，之后每把约 2 秒）。
 
-```bash
-python skills/dota2-replay-coach/scripts/fetch_replay.py <match_id> ./work
-python -m gem parse ./work/<match_id>.dem --format json \
-    --output ./work/parsed_<match_id>.json --no-banner
-python skills/dota2-replay-coach/scripts/index_parsed.py ./work/parsed_<match_id>.json --info
-sqlite3 ./work/parsed_<match_id>.db \
-  "SELECT hero_name, net_worth, last_hits FROM players ORDER BY net_worth DESC"
-```
+## 已知边界
 
-需要"死亡时队友离我多远"这类只有坐标才能证明的问题时，再走逐 tick 路径（见下）。
-**完整的命令序列、前置依赖与踩坑都在 skill 里**——这些是给 AI 执行用的，不是给人背的：
-[`SKILL.md`](skills/dota2-replay-coach/SKILL.md) ·
-[`references/parse-pipeline.md`](skills/dota2-replay-coach/references/parse-pipeline.md) ·
-[`references/parsed-schema.md`](skills/dota2-replay-coach/references/parsed-schema.md)
+- **拿不到**相机、鼠标、视野外的隐藏信息、玩家意图——任何解析器都拿不到。
+- **拿不到"操作质量"**：反应速度、点击精度、临场判断这些只能从录像里看，数据里没有。
+- 坐标是**按采样点**记录的（每约 0.3–0.5 秒一个点，取决于路径），**不是逐帧**：
+  死亡瞬间可能落在两个采样点之间。
+- 坐标路径的时钟**每场独立**，必须用计分板死亡时刻校准；校准不上时脚本会拒绝输出
+  而不是给出不可信的数字。
+- 单排路人局（game_mode 22）**没有 BP 顺序**，选人分析只能写成条件式。
 
 ## 目录结构
 
 ```
 skills/dota2-replay-coach/
-├── SKILL.md                       # 主流程
-├── references/
-│   ├── parse-pipeline.md          # 三条解析路径的完整操作、前置依赖与坑
-│   ├── parsed-schema.md           # ★ 解析数据的 SQLite 表结构 + 示例查询（问数据前先看）
-│   ├── data-traps.md              # 数据陷阱与取证配方（读任何指标前必看）
-│   └── data-contract.md           # 事实包（fact bundle）的字段契约
-└── scripts/
-    ├── fetch_replay.py            # 下载 + 解压录像（按魔数识别 zstd/bzip2）
-    ├── index_parsed.py            # ★ 解析 JSON → SQLite，之后随便写 SQL 查
-    ├── extract_match_facts.py     # 抽取精简事实包（给模型看的）
-    ├── ticks_coach.py             # ★ 逐 tick 态势分析：时钟校准 + 每次死亡时谁在附近
-    └── clarity/                   # ★ clarity 解析器（Java，Maven 工程）
-        ├── pom.xml
-        ├── ReplayDump.java        # 逐 tick 英雄坐标 CSV
-        └── Survey.java            # 探查：这把录像里有哪些实体类 / 字段
+├── SKILL.md                 # 给 AI 的主流程（含可直接执行的完整命令序列）
+├── references/              # 三条解析路径、SQLite 表结构、数据陷阱、事实包契约
+└── scripts/                 # 下载、建索引、抽事实包、逐 tick 态势分析；clarity 为 Java 子工程
 ```
 
-## 数据怎么查
-
-**核心原则：解析出来的完整事件数据（一场 40 分钟约 50–140 MB，约 15–33M token）不喂给模型。**
-
-先把它建成 SQLite 库（上面快速上手第 3 步），之后由 AI 直接写 SQL 取数——这样它能按你的
-问题自由取数，而不是只能拿到几个写死的指标。表结构与示例 SQL（找凶手、决斗台账、经济窗口、
-死亡时最近队友距离）见 [`references/parsed-schema.md`](skills/dota2-replay-coach/references/parsed-schema.md)。
-
-有两个细节值得注意：
-
-- **所有时间列已统一为游戏内秒数（已扣除暂停）**，与计分板直接对齐。负值 = 赛前购物期。
-- 原始 JSON 与 `.dem` 都留在磁盘上，`.db` 是可随时重建的派生物（已加 `.gitignore`）。
-
-## 逐 tick 坐标分析（clarity 路径）
-
-三条解析路径里，只有这一条能回答"**我死的那一刻，最近的队友离我多远**"——因为只有它有逐 tick 坐标。
-门槛是它需要 **Java（一次编译，之后每把约 2 秒）**，不像前两条路径只依赖 Python。
-
-这条路做三件事：把录像导成逐 tick 坐标 CSV → 用计分板的死亡时刻**校准时钟**（CSV 里的时间是
-原始 `tick/30`，含暂停和赛前，必须先校准，且**每场独立**）→ 对每次死亡判定「团战 / 迟到支援 /
-落单」。校准不上时脚本会**拒绝输出**而不是给不可信的数字。
-
-具体命令、编译方式与失败排查见
-[`references/parse-pipeline.md`](skills/dota2-replay-coach/references/parse-pipeline.md) 的 Path C。
+具体命令、前置依赖、踩坑与表结构都在 skill 里——那是给 AI 执行用的，装好后它会自己读。
 
 ## 关于成本
 
-- 录像下载、解析、建索引全部由脚本完成，**无模型成本**；一次完整流程约 1–2 分钟
-  （jar 已构建后，逐 tick 解析约 2 秒，JSON→SQLite 约 3 秒）。
-- 原始 JSON（50–140 MB）留在磁盘上，模型只拿 SQL 查询结果和精简事实包（几十 KB）。
-- 粗略成本如下图：
+一次完整流程约 1–2 分钟，**无模型成本**：录像下载、解析、建索引全部由脚本完成
+（逐 tick 解析约 2 秒，JSON→SQLite 约 3 秒）。原始 JSON（50–140 MB）留在磁盘上，
+模型只拿 SQL 查询结果和几十 KB 的事实包。
 
 <img width="500" alt="475650e2a6373173aba6f36b9a7903e5" src="https://github.com/user-attachments/assets/b648c9d0-62ae-4d7b-8a20-a680d46c794f" />
 
