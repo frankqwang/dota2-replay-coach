@@ -2,11 +2,13 @@
 
 Accumulated from real analysis sessions. Read before trusting any derived metric.
 
-Two data shapes are covered:
+Three data shapes are covered:
 
 - **§Traps / §Forensic recipes** — the parsed **event JSON** (gem-dota path, OpenDota's
-  `teamfights`/`kills_log`), which is what `extract_match_facts.py` consumes.
+  `teamfights`/`kills_log`). These apply equally when you query the **SQLite index**
+  (`index_parsed.py`) built from that JSON — the columns carry the same names and traps.
 - **§Per-tick coordinate CSV** — the **clarity path** output, which has its own failure modes.
+- Trap 19 (pause-aware time) applies to both the JSON and the index.
 
 ## Traps (things that produce wrong conclusions if used naively)
 
@@ -20,8 +22,10 @@ Two data shapes are covered:
    sentries and smoke are cheap consumables. Count consumables by item name, do not price them
    from the log's `value` field (it is 0).
 
-3. **`PURCHASE` events have `game_time_s = null`; they are tick-based.** Convert with
-   `game_start_tick` before comparing to combat events. DEATH/DAMAGE events carry `game_time_s`.
+3. **`PURCHASE` and `GOLD`/`XP`/`MODIFIER` events have `game_time_s = null`; they are tick-based.**
+   Convert with `game_start_tick` before comparing to combat events. DEATH/DAMAGE/ABILITY events
+   carry `game_time_s` directly. **The conversion must subtract paused time** — see trap 19.
+   `index_parsed.py` does this for you and writes the result into `game_time_s`.
 
 4. **`lane_gold_adv` / `lane_xp_adv` pair lanes ACROSS teams by `lane_role` digit** (1=safe,
    2=mid, 3=off), i.e. "Radiant offlane vs Dire offlane", NOT the actual same-lane matchup.
@@ -113,3 +117,15 @@ Two data shapes are covered:
     indices differ every match, and the clock offset differs by game-start time. Both must be read
     from the CSV (`dtname` / `team`) or passed as arguments. A script that only works on one match
     is not reusable and silently mislabels any other match.
+
+19. **Raw ticks do not stop during a pause; `game_time_s` does.** Converting `tick → seconds` with
+    a flat `tick/30 − constant` therefore **drifts by the total paused time** for every event after
+    the pause. Verified in one match: `game_clock.pauses` held 3 pauses (~46 s total), and a naive
+    conversion was off by exactly that amount from the first pause onward while matching perfectly
+    before it — which is why the error is easy to miss if you only calibrate early. The correct
+    conversion is
+    `t = (tick − game_start_tick)/30 − paused_ticks_before(tick)/30`,
+    and it reproduces the `game_time_s` of 4,213 DEATH and 9,941 MODIFIER_ADD events to within
+    0.5 s with zero mean bias. **Do not add `pre_game_duration`** — that injects a constant ~90 s
+    error. Pause windows live in `game_clock.pauses`; `index_parsed.py` applies this to every
+    `combat_log`, `player_series`, and `player_events` time column.

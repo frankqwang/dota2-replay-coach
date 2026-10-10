@@ -71,8 +71,18 @@ python -m gem parse <replay.dem> --format json --output <out_dir>/parsed_<id>.js
 
 3. Verify the output is real before trusting it: `players` non-empty, `combat_log` large,
    `game_end_tick` near the expected end. A few KB of JSON means parsing aborted.
-4. Query it with `scripts/query_parsed.py` (`players` / `kills` / `items` / `nw`) and extract the
-   fact bundle with `scripts/extract_match_facts.py`.
+4. **Index it, then query it with SQL** — do not read the JSON into context:
+
+```
+python scripts/index_parsed.py <out_dir>/parsed_<id>.json    # ~3 s, 141 MB -> ~107 MB .db
+# then, against the .db: SELECT ... (see references/parsed-schema.md)
+```
+
+   The schema doc lists every table, the field-level traps, and worked queries
+   (death forensics, duel ledgers, economy windows, nearest-ally distance). Prefer
+   writing your own SQL over fixed helper commands; that is the point of the index.
+   For a compact bundle to paste into a report, `scripts/extract_match_facts.py`
+   still works on the JSON.
 
 > **Build-compatibility warning.** Source 2 replays embed the entity schema, and Valve changes it
 > between client builds. A parser that works on build `N` can hard-fail on build `N+1` with a

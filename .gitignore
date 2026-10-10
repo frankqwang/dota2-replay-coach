@@ -16,6 +16,11 @@ od_*.json
 parsed_*.json
 ticks_*.csv
 match_facts*.json
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite3
 
 # Reports are fine to commit; scratch output is not
 *.tmp

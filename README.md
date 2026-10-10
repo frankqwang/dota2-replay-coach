@@ -23,7 +23,9 @@
    - **gem-dota** — 全量游戏事件 JSON（团战、技能、购买、伤害归因），适合事件级取证；
    - **clarity（Java，与 OpenDota 同款解析库）** — **逐 tick 英雄坐标**（每 0.5 秒 × 10 人），
      这是最独特的一路：它能回答 "我死的那一刻，最近的队友离我多远" 这类**只有坐标才能证明**的问题。
-3. **出报告**：默认先给一份可核对的中文 Markdown 草稿（先讲 1–3 个胜负手，再展开 BP / 分阶段 /
+3. **建索引**：把解析出的 JSON 转成 SQLite，之后由 AI 直接写 SQL 查询，**自由度更大**，
+   不再受限于固定脚本能吐出的那几个指标。
+4. **出报告**：默认先给一份可核对的中文 Markdown 草稿（先讲 1–3 个胜负手，再展开 BP / 分阶段 /
    团战 / 死亡归类 / 出装 / 转化），确认后再考虑分享成网页。
 
 解析是程序完成的，**不吃模型 token**；一次性动作，后续追问不会重复解析。
@@ -35,17 +37,33 @@ skills/dota2-replay-coach/
 ├── SKILL.md                       # 主流程
 ├── references/
 │   ├── parse-pipeline.md          # 三条解析路径的完整操作、前置依赖与坑
+│   ├── parsed-schema.md           # ★ 解析数据的 SQLite 表结构 + 示例查询（问数据前先看）
 │   ├── data-traps.md              # 数据陷阱与取证配方（读任何指标前必看）
 │   └── data-contract.md           # 事实包（fact bundle）的字段契约
 └── scripts/
     ├── fetch_replay.py            # 下载 + 解压录像（按魔数识别 zstd/bzip2）
-    ├── query_parsed.py            # 定向查询（players / kills / items / nw）
+    ├── index_parsed.py            # ★ 解析 JSON → SQLite，之后随便写 SQL 查
     ├── extract_match_facts.py     # 抽取精简事实包（给模型看的）
     ├── ticks_coach.py             # ★ 逐 tick 坐标分析（自动校准时钟）
     └── clarity/                   # ★ 逐 tick 坐标解析器（Java，Maven 工程）
         ├── pom.xml
         └── ReplayDump.java
 ```
+
+## 数据怎么查
+
+解析出来的完整事件数据（一场 40 分钟约 50–140 MB）**不喂给模型**，而是先建成一个
+SQLite 库，之后由 AI 直接写 SQL 去查——这样它能按你的问题自由取数，而不是只能拿到
+几个写死的指标。
+
+```bash
+python scripts/index_parsed.py parsed_9036564967.json   # 约 3 秒，141 MB → 约 107 MB
+sqlite3 parsed_9036564967.db "SELECT hero_name, net_worth FROM players ORDER BY net_worth DESC"
+```
+
+表结构与示例 SQL（找凶手、决斗台账、经济窗口、死亡时最近队友距离）见
+[`references/parsed-schema.md`](skills/dota2-replay-coach/references/parsed-schema.md)。
+所有时间列已统一为**游戏内秒数（已扣除暂停）**，与计分板直接对齐。
 
 ## 快速开始（逐 tick 坐标解析器）
 
@@ -75,8 +93,9 @@ python scripts/ticks_coach.py <out.csv> --me legion_commander --offset 229
 
 ## 关于成本
 
-- 录像下载 + 解析全部由脚本完成，**无模型成本**；时间约 1–2 分钟（jar 已构建后，逐 tick 解析仅约 2 秒）。
-- 默认只把精简事实包（几十 KB）喂给模型，原始 JSON 留在磁盘上按需查询。
+- 录像下载、解析、建索引全部由脚本完成，**无模型成本**；一次完整流程约 1–2 分钟
+  （jar 已构建后，逐 tick 解析约 2 秒，JSON→SQLite 约 3 秒）。
+- 原始 JSON（50–140 MB）留在磁盘上，模型只拿 SQL 查询结果和精简事实包（几十 KB）。
 - 粗略成本如下图：
 
 <img width="500" alt="475650e2a6373173aba6f36b9a7903e5" src="https://github.com/user-attachments/assets/b648c9d0-62ae-4d7b-8a20-a680d46c794f" />
