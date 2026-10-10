@@ -97,7 +97,7 @@ mvn -s <settings.xml> -B -DskipTests package      # produces target/dota-lc-pars
 ```
 
 Dependencies come from Maven Central: `com.skadistats:clarity:5.0.1` +
-`com.skadistats:clarity-protobuf:7.x`. See [agent-adapters.md](agent-adapters.md) §3 for the
+`com.skadistats:clarity-protobuf:7.x`. See "Prerequisites" below for the
 "mirror missing a jar → fetch from `repo1.maven.org`" workaround.
 
 ### C.2 Run
@@ -140,6 +140,31 @@ It derives hero names from `dtname`, sides from `team`, collapses illusion entit
 each window's residual, and prints an explicit "team present / adjacent / alone" verdict per death
 from the nearest-ally distance. If a clear majority of deaths fail to align, it suppresses the
 derived timings rather than printing numbers it cannot stand behind.
+
+---
+
+## Prerequisites
+
+The parsers are Python (gem-dota / scripts) and Java (clarity). Install only what the path you
+choose needs.
+
+| Need | Windows | macOS / Linux |
+|---|---|---|
+| Python 3.10+ | system or bundled python | `python3` |
+| `gem-dota` | `pip install gem-dota` (into a venv) | same |
+| Java 17+ (clarity path) | Adoptium Temurin JDK | `brew install openjdk` / apt |
+| Maven (clarity path, to build once) | portable `apache-maven-*-bin.zip` (no admin needed) | `brew install maven` / apt |
+| `zstd` | Python `compression.zstd` (3.14+) or `zstandard` pkg | same |
+
+**Gotchas seen in the wild** (verify in your own environment, do not assume):
+
+- Some sandboxes block direct downloads from `replay*.valve.net` via `urllib` while `curl` works.
+  If a fetch fails with 403, retry with `curl`.
+- Long no-output jobs can look "stuck" because stdout is buffered. Write progress to a log file and
+  tail it, or run in the background and poll the log, not the live stream.
+- Corporate/large-artifact mirrors may be **missing specific jars** (observed: an Aliyun mirror had
+  the `clarity` *pom* but not the *jar*). If a build fails on a missing artifact, fetch it directly
+  from Maven Central (`repo1.maven.org`) instead of the mirror.
 
 ---
 

@@ -7,14 +7,6 @@ description: "Turn Dota 2 replay data (a .dem file, a parsed replay JSON, or a m
 
 Use this skill when the user provides a `.dem` file, a parsed replay JSON, a match ID, a screenshot, or a lineup, and asks for Dota 2 coaching. It is hero-agnostic: Necrophos, Legion Commander, Axe, supports, carries, and unfamiliar heroes all use the same evidence pipeline. Hero-specific rules must be stated as conditional advice, never baked into extraction. The goal is practical improvement for a low-MMR solo player: prioritize decisions, positioning, timing, item purpose, and controllable actions over mechanical perfection.
 
-## Environment contract (read this first)
-
-Assume only these capabilities from the executing agent:
-
-1. Read a file, 2. write a file, 3. run a shell command, 4. make an HTTP request.
-
-Everywhere below, "run", "read", "write", "fetch" mean *use whatever tool your agent provides for that capability*. Two things genuinely differ per agent and per model: how much context you can afford, and what must be installed first. Both are in **[references/agent-adapters.md](references/agent-adapters.md)** — read it once at the start. There is no tool-name table on purpose: you already know your own tools, and any such table would go stale.
-
 ## Coaching contract
 
 Coach for a 32-year-old, average-reaction, low-MMR solo player who wants higher win rate, better map/teamfight understanding, and hero comfort without turning Dota into a rigid training plan. Favor judgment, positioning, item choices, information, and timing over speed or flashy mechanics. The player enjoys active, game-influencing heroes such as Legion Commander, Necrophos, and Axe, but advice must remain conditional on the actual lineup and patch context.
@@ -57,7 +49,7 @@ The coordinate parser outputs one row every ~0.5 s per hero: `gametime,tick,inde
 
 ## Token budget
 
-Never send the binary `.dem` to the model, and do not paste the full parsed combat log unless a narrow forensic question needs it. A typical 40-minute parsed JSON can be 50–80 MB (roughly 15–25 million tokens), which is wasteful. Use the extractor first: its compact fact bundle is usually tens of thousands of bytes (roughly 15–25k tokens pretty, less minified). For a normal report, send the fact bundle plus only 2–4 selected death/teamfight windows; a practical target is 8–20k input tokens and 3–8k output tokens. Keep chart datasets in the report artifact, not duplicated in the coaching prompt. Concrete budgets per model live in [references/agent-adapters.md](references/agent-adapters.md).
+Never send the binary `.dem` to the model, and do not paste the full parsed combat log unless a narrow forensic question needs it. A typical 40-minute parsed JSON can be 50–80 MB (roughly 15–25 million tokens), which is wasteful. Use the extractor first: its compact fact bundle is usually tens of thousands of bytes (roughly 15–25k tokens pretty, less minified). For a normal report, send the fact bundle plus only 2–4 selected death/teamfight windows; a practical target is 8–20k input tokens and 3–8k output tokens. Keep chart datasets in the report artifact, not duplicated in the coaching prompt. On a smaller context window, send less and query the raw JSON on demand rather than pre-loading more.
 
 ## Low-MMR operating rules
 
@@ -70,7 +62,7 @@ Never send the binary `.dem` to the model, and do not paste the full parsed comb
 
 Default to Markdown: produce a concise, coach-facing Markdown draft the user can verify (item order, target selection, timing, and the 2–3 highest-impact improvements). Preserve existing sections and visuals when revising a report; add separate blocks for BP, stage analysis, teamfight survival/kill exchange, target selection, and objective conversion.
 
-Then offer to share. Decide from what your agent actually supports — a static HTML page, a hosted link, a gist, or just a local file. Offer the best option you have; **if you have none, deliver the local Markdown/HTML file and say so plainly.** When in doubt, ask the user how they want to receive it rather than assuming. Never let website layout substitute for deeper replay analysis.
+Then offer to share. Offer the best delivery you can actually produce — a static HTML page, a hosted link, a gist, or just a local file. **If you can only deliver a local file, hand it over and say so plainly.** When in doubt, ask the user how they want to receive it rather than assuming. Never let website layout substitute for deeper replay analysis.
 
 **Chinese encoding gate (applies to any HTML/JSON output, regardless of platform):** require both an HTTP `Content-Type` containing `charset=utf-8` and an HTML `<meta charset="utf-8">` (prefer `lang="zh-CN"`); JSON endpoints must return `application/json; charset=utf-8`. If a browser shows mojibake, fix the output entrypoint and regenerate before sharing — a UTF-8 source file alone is not sufficient.
 
@@ -78,9 +70,8 @@ Then offer to share. Decide from what your agent actually supports — a static 
 
 | File | Read when |
 |---|---|
-| [references/parse-pipeline.md](references/parse-pipeline.md) | You need to turn `.dem` → JSON/CSV (OpenDota pull, gem-dota, or the bundled clarity parser) |
+| [references/parse-pipeline.md](references/parse-pipeline.md) | You need to turn `.dem` → JSON/CSV, or check prerequisites |
 | [references/data-traps.md](references/data-traps.md) | Before trusting **any** derived metric |
 | [references/data-contract.md](references/data-contract.md) | Building or adapting the fact bundle |
-| [references/agent-adapters.md](references/agent-adapters.md) | At the start, for your token budget and the runtime prerequisites |
 
 Scripts: `scripts/fetch_replay.py` (download + decompress), `scripts/query_parsed.py` (targeted queries on the parsed JSON), `scripts/extract_match_facts.py` (compact fact bundle), `scripts/ticks_coach.py` (per-tick coordinate analysis), `scripts/clarity/` (Java source for the coordinate parser).

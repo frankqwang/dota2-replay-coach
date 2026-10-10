@@ -34,10 +34,9 @@
 skills/dota2-replay-coach/
 ├── SKILL.md                       # 主流程
 ├── references/
-│   ├── parse-pipeline.md          # 三条解析路径的完整操作与坑
+│   ├── parse-pipeline.md          # 三条解析路径的完整操作、前置依赖与坑
 │   ├── data-traps.md              # 数据陷阱与取证配方（读任何指标前必看）
-│   ├── data-contract.md           # 事实包（fact bundle）的字段契约
-│   └── agent-adapters.md          # token 预算与运行环境前置
+│   └── data-contract.md           # 事实包（fact bundle）的字段契约
 └── scripts/
     ├── fetch_replay.py            # 下载 + 解压录像（按魔数识别 zstd/bzip2）
     ├── query_parsed.py            # 定向查询（players / kills / items / nw）
