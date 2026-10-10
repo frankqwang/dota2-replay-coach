@@ -70,3 +70,30 @@ These apply to the parsed JSON shape used by `extract_match_facts.py`.
 - **Attack-damage audit for duel-reward heroes**: permanent bonus damage comes from ultimate
   wins (e.g. Legion Commander +18 per win at max level). Total = base stats + items +
   (wins × bonus). Cite wins from the duel ledger, not the final damage number alone.
+
+## Traps specific to the per-tick coordinate CSV (clarity path)
+
+11. **`gametime` is `tick/30`, not the in-game clock.** `m_pGameRules.m_fGameTime` is frequently
+    unreadable, so the column is raw demo time. **Calibrate per match**: match the hero's death
+    moments to scoreboard/OpenDota deaths and solve `real_seconds = csv_gametime − k`. Verify `k`
+    reproduces *every* death to ≤1 s before computing anything. (Observed offset in one match: 229 s.)
+
+12. **A hero is not one entity.** Illusions/clones share the same DT class
+    (`CDOTA_Unit_Hero_*`). Take the real body as the smallest/first `index` per hero per team, or
+    match against the team — otherwise you will plot illusion ghosts.
+
+13. **Pre-game rows exist and start negative-ish.** Heroes can appear before the horn; filter to the
+    laning window explicitly, and do not treat the first CSV row as 0:00.
+
+14. **0.5 s sampling can miss the death instant.** `lifestate≥1` marks the dying window; a hero can
+    go from full HP to dead between samples. Use the death window's start position as "where he was
+    when caught", and cross-check the exact second against the scoreboard.
+
+15. **Coordinates are `cell × 128 + vec`, map ≈ 0–32768.** Distances are in game units: attack range
+    ≈ 600, tower range ≈ 700, XP range ≈ 1300. "Team disconnected" ≈ > 2000 between the player and
+    the nearest ally. State the unit basis when you cite a distance — a raw number means nothing to
+    the reader without it.
+
+16. **Death-cause must come from the event log, not the CSV.** The coordinate CSV shows *where* and
+    *when*, never *who* or *what killed you*. Pair it with the parsed JSON's DEATH events (or OpenDota
+    `killed_by`) to name the killer; do not infer the killer from proximity alone.

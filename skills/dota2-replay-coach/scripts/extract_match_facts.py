@@ -84,7 +84,9 @@ def main() -> None:
             continue
         key = detection_items.get(e.get("value_name") or "")
         if key:
-            detection[short(e.get("target_name"))][key] += 1
+            # PURCHASE 的 target_name 与 players 的 hero_name 可能不一致
+            # （敌法师: anti_mage vs antimage），用 setdefault 兜底
+            detection.setdefault(short(e.get("target_name")), {"dust": 0, "sentry": 0, "gem": 0})[key] += 1
     ability_uses = player.get("ability_uses", {})
     item_uses = player.get("item_uses", {})
     result = {
