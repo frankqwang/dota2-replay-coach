@@ -21,11 +21,13 @@
 2. **解析**（三条路径，按问题选）：
    - **OpenDota API** — 免下载，分钟级聚合数据，适合快速过一遍；
    - **gem-dota** — 全量游戏事件 JSON（团战、技能、购买、伤害归因），适合事件级取证；
-   - **clarity（Java，与 OpenDota 同款解析库）** — **逐 tick 英雄坐标**（每 0.5 秒 × 10 人），
-     这是最独特的一路：它能回答 "我死的那一刻，最近的队友离我多远" 这类**只有坐标才能证明**的问题。
-     注意 clarity 读的是**整份实体图**（一场 46 分钟的比赛有 466 个实体类：10 个英雄、168 个技能、
-     227 个物品、每队 6288 个统计字段……），坐标只是我们写的那个 dump 类的输出；
-     需要什么字段可以用 `scripts/clarity/Survey.java` 探一下再自己取。
+   - **clarity（Java，与 OpenDota 同款解析库）** — 读整份实体图，可按需导出**任意实体字段**。
+     仓库里自带的 dump 类输出的是**逐 tick 英雄坐标**（每 0.5 秒 × 10 人），这是三条路径里
+     唯一能回答 "我死的那一刻，最近的队友离我多远" 这类**只有坐标才能证明**的问题的数据。
+
+     注意：一场 46 分钟的比赛有 **466 个实体类**（10 个英雄、168 个技能、227 个物品，每队
+     6288 个统计字段……），坐标只是其中一个类的输出。需要别的字段就先探测：
+     `scripts/clarity/Survey.java`。
 3. **建索引**：把解析出的 JSON 转成 SQLite，之后由 AI 直接写 SQL 查询，**自由度更大**，
    不再受限于固定脚本能吐出的那几个指标。
 4. **出报告**：默认先给一份可核对的中文 Markdown 草稿（先讲 1–3 个胜负手，再展开 BP / 分阶段 /
@@ -47,7 +49,7 @@ skills/dota2-replay-coach/
     ├── fetch_replay.py            # 下载 + 解压录像（按魔数识别 zstd/bzip2）
     ├── index_parsed.py            # ★ 解析 JSON → SQLite，之后随便写 SQL 查
     ├── extract_match_facts.py     # 抽取精简事实包（给模型看的）
-    ├── ticks_coach.py             # ★ 逐 tick 坐标分析（自动校准时钟）
+    ├── ticks_coach.py             # ★ 逐 tick 态势分析：时钟校准 + 每次死亡时谁在附近
     └── clarity/                   # ★ clarity 解析器（Java，Maven 工程）
         ├── pom.xml
         ├── ReplayDump.java        # 逐 tick 英雄坐标 CSV
@@ -69,31 +71,45 @@ sqlite3 parsed_9036564967.db "SELECT hero_name, net_worth FROM players ORDER BY 
 [`references/parsed-schema.md`](skills/dota2-replay-coach/references/parsed-schema.md)。
 所有时间列已统一为**游戏内秒数（已扣除暂停）**，与计分板直接对齐。
 
-## 快速开始（逐 tick 坐标解析器）
+## 逐 tick 坐标分析（clarity 路径）
+
+三条解析路径里，只有这一条能回答"**我死的那一刻，最近的队友离我多远**"——因为只有它有逐 tick 坐标。
+
+**1) 先建解析器**（一次性；之后解析一把录像约 2 秒）
 
 ```bash
 cd skills/dota2-replay-coach/scripts/clarity
 mvn -B -DskipTests package          # 依赖 com.skadistats:clarity:5.0.1（Maven Central）
+```
+
+没有 Maven 也可以直接对已构建的 jar 编译单个类（见 `references/parse-pipeline.md`）。
+
+**2) 导出逐 tick 坐标 CSV**
+
+```bash
 java -Xmx3g -jar target/dota-lc-parse.jar <replay.dem> <out.csv> 15
 ```
 
-输出：`gametime,tick,index,dtname,team,heroid,x,y,hp,maxhp,level,lifestate`（每约 0.5 秒一行）。
-注意 `gametime` 是原始 `tick/30`，需要按死亡时刻对齐校准后再用。
+输出 `gametime,tick,index,dtname,team,heroid,x,y,hp,maxhp,level,lifestate`（每约 0.5 秒一行）。
+**`gametime` 是原始 `tick/30`，含暂停、含赛前时间，必须先校准**（下一步）。
+
+**3) 分析与校准**
 
 ```bash
-# 1) 看这把有哪些英雄
+# 看这把有哪些英雄
 python scripts/ticks_coach.py <out.csv> --list-heroes
 
-# 2) 校准时钟 + 逐次死亡态势（传入计分板的真实死亡时刻）
+# 校准时钟 + 逐次死亡态势（传入计分板/OpenDota 的真实死亡时刻）
 python scripts/ticks_coach.py <out.csv> --me legion_commander --death-times 87,1085,1972
 
-# 3) 或直接给定偏移量跳过校准
+# 或直接给定偏移量跳过校准（偏移量 = 上一把算出来的值，换局必须重算）
 python scripts/ticks_coach.py <out.csv> --me legion_commander --offset 229
 ```
 
 `ticks_coach.py` 会自动识别这把的英雄与阵营、把幻象归到本体、用**中位数**求解时钟偏移
 （单次死亡时刻记错不会污染整局），并对每次死亡给出「团战 / 迟到支援 / 落单」的判定。
-校准不上时它会**拒绝输出**派生时间，而不是给出不可信的数字。
+**校准不上时它会拒绝输出派生时间**，而不是给出不可信的数字——如果看到 `✗ offset NOT
+trustworthy`，说明传入的死亡时刻有问题，去核对而不是继续用。
 
 ## 关于成本
 
