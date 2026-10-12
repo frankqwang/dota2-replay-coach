@@ -1,68 +1,67 @@
 # dota2-replay-coach
 
-给一个比赛 ID（或 `.dem` 录像），自动完成**下载录像 → 解析 → 生成可核对的教练报告**，
-然后回答你关心的任何问题（团战、走位、击杀、出装……）。
+English | [简体中文](README.zh-CN.md)
 
-把仓库地址丢给你的 AI，让它把这个 skill 装到它自己的 skill 目录即可。
+Provide a match ID or a `.dem` replay to automatically **download the replay → parse it → generate an evidence-backed coaching report**, then ask follow-up questions about teamfights, positioning, kills, item choices, and more.
 
-## 它做什么
+Give your AI assistant this repository URL and ask it to install the skill in its own skills directory.
 
-- **取数据**：按比赛 ID 从 OpenDota 拿元数据与录像链接，下载 Valve 原始录像（也用你客户端已有的 `.dem`）。
-- **解析**：三条路径按问题选——免下载的 OpenDota API、全量事件 JSON（gem-dota）、
-  逐 tick 实体状态（clarity）。三者互补：事件、几何，各答一类问题。
-- **建模**：把解析结果建成 SQLite，之后按你的问题自由取数，而不是只能拿到几个写死的指标。
-- **出报告**：默认先给一份可核对的中文 Markdown 草稿（先讲 1–3 个胜负手，再展开 BP /
-  分阶段 / 团战 / 死亡归类 / 出装 / 转化），确认后再考虑分享成网页。
+## What it does
 
-解析全部由程序完成，**不吃模型 token**；一次性动作，后续追问不会重复解析。
+- **Fetches data**: Uses OpenDota to retrieve match metadata and replay URLs, then downloads the original Valve replay. It can also use a `.dem` file already saved by your game client.
+- **Parses the replay**: Chooses among three complementary paths based on your question: the OpenDota API without downloading a replay, full event JSON with gem-dota, or per-tick entity state with clarity. Events explain what happened; coordinates help establish where it happened.
+- **Builds a queryable database**: Indexes parsed data in SQLite so the assistant can query evidence for your questions instead of relying on a fixed set of metrics.
+- **Produces a report**: Starts with a verifiable Markdown draft in Chinese by default. It highlights 1–3 decisive decisions before covering the draft, game phases, teamfights, death patterns, item choices, and how advantages were converted into objectives. Publishing a shareable web page is considered after you confirm the draft.
 
-## 它能回答什么
+Parsing runs entirely in code and **does not consume model tokens**. It runs once per replay; follow-up questions reuse the parsed data.
 
-| 问题 | 靠什么回答 |
+## Questions it can answer
+
+| Question | Supporting evidence |
 |---|---|
-| 这把输在哪几个决策上？ | 事件 JSON + SQL 取数 |
-| 我这次死亡是谁打的、打在什么上？ | 伤害归因（按来源分组） |
-| 死之前我手里的保命物品/技能用了没有？ | 物品与技能生效记录 |
-| 决斗（或大招）到底命中了几次、赢了几个？ | 技能事件 + 死亡事件配对 |
-| 出装对不对？对面有没有针对我的隐身？ | 购买日志 + 反隐购买审计 |
-| **我死的那一刻，最近的队友离我多远？** | 逐 tick 坐标（唯一能做到的路径） |
-| 我是落单死的，还是在团战里死的？ | 逐 tick 坐标自连接 |
+| Which decisions cost me this game? | Event JSON and SQL queries |
+| Who dealt the damage that killed me, and what dealt it? | Damage attribution grouped by source |
+| Did I use my defensive items or abilities before dying? | Item and ability activation records |
+| How many Duels or ultimates connected, and how many led to wins or kills? | Ability events matched with death events |
+| Did my items fit the game? Did the enemy buy detection for my invisibility? | Purchase logs and detection purchase checks |
+| **How far away was my closest teammate when I died?** | Per-tick coordinates, available through the clarity path |
+| Did I die alone or during a teamfight? | Spatial joins on per-tick coordinates |
 
-最后两条是分水岭：**只有 clarity 的逐 tick 坐标能证明位置**，其余问题用事件数据就够。
-坐标路径的门槛是需要 Java（一次编译，之后每把约 2 秒）。
+The last two questions require positional evidence: **only clarity's per-tick coordinates can establish positions in this workflow**. The other questions can be answered with event data. The coordinate path requires Java and a one-time compilation; subsequent parsing takes approximately 2 seconds per match in the example setup.
 
-## 已知边界
+## Known limitations
 
-- **拿不到**相机、鼠标、视野外的隐藏信息、玩家意图——任何解析器都拿不到。
-- **拿不到"操作质量"**：反应速度、点击精度、临场判断这些只能从录像里看，数据里没有。
-- 坐标是**按采样点**记录的（每约 0.3–0.5 秒一个点，取决于路径），**不是逐帧**：
-  死亡瞬间可能落在两个采样点之间。
-- 坐标路径的时钟**每场独立**，必须用计分板死亡时刻校准；校准不上时脚本会拒绝输出
-  而不是给出不可信的数字。
-- 单排路人局（game_mode 22）**没有 BP 顺序**，选人分析只能写成条件式。
+- The workflow cannot establish camera movement, mouse input, information hidden from a player's vision, or player intent.
+- It cannot directly measure **mechanical execution** such as reaction time, click accuracy, or in-the-moment judgment. Those require watching the replay.
+- Coordinates are **sampled**, approximately every 0.3–0.5 seconds depending on the parsing path, rather than recorded for every frame. A death can occur between two samples.
+- The coordinate timeline must be calibrated separately for each match against scoreboard death times. If calibration fails, the script refuses to output unreliable numbers.
+- Standard All Pick pub matches (`game_mode 22`) do not provide a draft order in this workflow, so draft analysis must remain conditional.
 
-## 目录结构
+## Repository layout
 
-```
+```text
 skills/dota2-replay-coach/
-├── SKILL.md                 # 给 AI 的主流程（含可直接执行的完整命令序列）
-├── references/              # 三条解析路径、SQLite 表结构、数据陷阱、事实包契约
-└── scripts/                 # 下载、建索引、抽事实包、逐 tick 态势分析；clarity 为 Java 子工程
+├── SKILL.md                 # Main workflow for the AI, including runnable command sequences
+├── references/              # Parsing paths, SQLite schemas, data pitfalls, and fact-bundle contracts
+└── scripts/                 # Downloading, indexing, fact extraction, and per-tick spatial analysis;
+                             # clarity is a Java subproject
 ```
 
-具体命令、前置依赖、踩坑与表结构都在 skill 里——那是给 AI 执行用的，装好后它会自己读。
+Detailed commands, prerequisites, troubleshooting notes, and database schemas live in the [skill documentation](skills/dota2-replay-coach/SKILL.md). The assistant reads these instructions after installation.
 
-## 关于成本
+## Runtime and model usage
 
-一次完整流程约 1–2 分钟，**无模型成本**：录像下载、解析、建索引全部由脚本完成
-（逐 tick 解析约 2 秒，JSON→SQLite 约 3 秒）。原始 JSON（50–140 MB）留在磁盘上，
-模型只拿 SQL 查询结果和几十 KB 的事实包。
+A complete data-processing run takes approximately 1–2 minutes in the example setup. Downloading, parsing, and indexing are handled by scripts and **do not consume model tokens**; report generation and follow-up answers still use the model.
 
-<img width="500" alt="475650e2a6373173aba6f36b9a7903e5" src="https://github.com/user-attachments/assets/b648c9d0-62ae-4d7b-8a20-a680d46c794f" />
+Example timings are approximately 2 seconds for per-tick parsing and 3 seconds for JSON-to-SQLite indexing. Raw JSON files (50–140 MB) stay on disk; the model receives SQL query results and fact bundles of only tens of KB. Actual timings depend on the replay, download speed, and hardware.
 
-## 效果示例
+<img width="500" alt="Example of model usage during replay analysis" src="https://github.com/user-attachments/assets/b648c9d0-62ae-4d7b-8a20-a680d46c794f" />
 
-<img width="500" alt="aa95edefdbe41ae16fec15c9c61ad1dc" src="https://github.com/user-attachments/assets/c37cb3ac-f992-49c7-b548-147c443192a5" />
-<img width="500" alt="832887e041eacc1d6040afdecb02f335" src="https://github.com/user-attachments/assets/c4698e11-528f-479c-a060-175f83bf9582" />
-<img width="500" alt="8e6216e11b1fc88958f498f486302059" src="https://github.com/user-attachments/assets/1492ca8e-e047-4002-bdef-522a85853390" />
-<img width="500" alt="f1575479596b5e742ad00e350977003b" src="https://github.com/user-attachments/assets/04b676c1-a1bd-44d6-b280-0377a7f200b9" />
+## Example output
+
+The screenshots below show example reports in Chinese.
+
+<img width="500" alt="Example coaching report, screenshot 1" src="https://github.com/user-attachments/assets/c37cb3ac-f992-49c7-b548-147c443192a5" />
+<img width="500" alt="Example coaching report, screenshot 2" src="https://github.com/user-attachments/assets/c4698e11-528f-479c-a060-175f83bf9582" />
+<img width="500" alt="Example coaching report, screenshot 3" src="https://github.com/user-attachments/assets/1492ca8e-e047-4002-bdef-522a85853390" />
+<img width="500" alt="Example coaching report, screenshot 4" src="https://github.com/user-attachments/assets/04b676c1-a1bd-44d6-b280-0377a7f200b9" />
