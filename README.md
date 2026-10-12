@@ -19,7 +19,7 @@ Parsing runs entirely in code and **does not consume model tokens**. It runs onc
 
 **The questions below are examples, not an exhaustive list.** At its core, this skill lets your AI assistant mine game logs parsed from the replay. You can ask about any aspect of your match: the assistant can write SQL queries, connect events across time, compare players and situations, and investigate follow-up questions using the same dataset.
 
-The analysis follows your questions rather than a fixed menu of reports or predefined metrics. What it can establish depends on the evidence available in the parsed data; see [Known limitations](#known-limitations) below.
+The analysis follows your questions rather than a fixed menu of reports or predefined metrics. See [How it works](#how-it-works) below.
 
 | Example question | Supporting evidence |
 |---|---|
@@ -33,13 +33,11 @@ The analysis follows your questions rather than a fixed menu of reports or prede
 
 The last two questions require positional evidence: **only clarity's per-tick coordinates can establish positions in this workflow**. The other questions can be answered with event data. The coordinate path requires Java and a one-time compilation; subsequent parsing takes approximately 2 seconds per match in the example setup.
 
-## Known limitations
+## How it works
 
-- The workflow cannot establish camera movement, mouse input, information hidden from a player's vision, or player intent.
-- It cannot directly measure **mechanical execution** such as reaction time, click accuracy, or in-the-moment judgment. Those require watching the replay.
-- Coordinates are **sampled**, approximately every 0.3–0.5 seconds depending on the parsing path, rather than recorded for every frame. A death can occur between two samples.
-- The coordinate timeline must be calibrated separately for each match against scoreboard death times. If calibration fails, the script refuses to output unreliable numbers.
-- Standard All Pick pub matches (`game_mode 22`) do not provide a draft order in this workflow, so draft analysis must remain conditional.
+The skill turns the replay into structured game logs and entity state, then lets the AI query and connect that evidence to answer your questions. It can extend queries and extract additional replay fields when needed: clarity is a general entity reader, not just a coordinate tool. The examples above are starting points for exploring your match.
+
+This is data analysis rather than watching replay footage. Conclusions depend on what the replay records, what the parser extracts, and the data's completeness and timing precision; the assistant should distinguish recorded facts from interpretation and flag missing evidence.
 
 ## Repository layout
 
