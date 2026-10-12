@@ -15,9 +15,13 @@ Give your AI assistant this repository URL and ask it to install the skill in it
 
 Parsing runs entirely in code and **does not consume model tokens**. It runs once per replay; follow-up questions reuse the parsed data.
 
-## Questions it can answer
+## Example questions you can ask
 
-| Question | Supporting evidence |
+**The questions below are examples, not an exhaustive list.** At its core, this skill lets your AI assistant mine game logs parsed from the replay. You can ask about any aspect of your match: the assistant can write SQL queries, connect events across time, compare players and situations, and investigate follow-up questions using the same dataset.
+
+The analysis follows your questions rather than a fixed menu of reports or predefined metrics. What it can establish depends on the evidence available in the parsed data; see [Known limitations](#known-limitations) below.
+
+| Example question | Supporting evidence |
 |---|---|
 | Which decisions cost me this game? | Event JSON and SQL queries |
 | Who dealt the damage that killed me, and what dealt it? | Damage attribution grouped by source |
